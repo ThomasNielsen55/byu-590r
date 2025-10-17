@@ -346,8 +346,10 @@ EOF
     scp -i ~/.ssh/"$KEY_NAME".pem -o StrictHostKeyChecking=no setup-server.sh ubuntu@"$INSTANCE_IP":~/
     ssh -i ~/.ssh/"$KEY_NAME".pem -o StrictHostKeyChecking=no ubuntu@"$INSTANCE_IP" "chmod +x setup-server.sh && ./setup-server.sh"
     
-    # Clean up
-    rm setup-server.sh
+    # Clean up temporary files (both local and remote)
+    log_info "Cleaning up temporary files..."
+    rm -f setup-server.sh
+    ssh -i ~/.ssh/"$KEY_NAME".pem -o StrictHostKeyChecking=no ubuntu@"$INSTANCE_IP" "rm -f setup-server.sh" 2>/dev/null || true
     
     log_success "EC2 server setup complete"
 }
@@ -402,6 +404,10 @@ main() {
     echo "     Backend API: http://$EC2_HOST:4444/api/hello"
     echo ""
     log_info "Configuration saved to: .server-config"
+    
+    # Final cleanup - ensure no temporary files remain
+    log_info "Final cleanup..."
+    rm -f setup-server.sh
 }
 
 # Run main function
