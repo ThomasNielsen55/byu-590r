@@ -86,6 +86,15 @@ stop_instance() {
 terminate_instance() {
     log_info "Terminating EC2 instance..."
     
+    # Disassociate Elastic IP first
+    log_info "Disassociating Elastic IP..."
+    aws ec2 describe-addresses --filters "Name=tag:Name,Values=byu-590r" --query 'Addresses[*].[AllocationId,AssociationId]' --output text | while read allocation_id association_id; do
+        if [ -n "$association_id" ] && [ "$association_id" != "None" ]; then
+            aws ec2 disassociate-address --association-id "$association_id" 2>/dev/null || true
+            log_info "Disassociated Elastic IP: $allocation_id"
+        fi
+    done
+    
     aws ec2 terminate-instances --instance-ids "$INSTANCE_ID" 2>/dev/null || true
     
     log_info "Waiting for instance to terminate..."

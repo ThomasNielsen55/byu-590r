@@ -119,7 +119,41 @@ create_ec2_instance() {
     
     echo "INSTANCE_IP=$INSTANCE_IP" >> .server-config
     
-    log_success "EC2 instance created: $INSTANCE_ID ($INSTANCE_IP)"
+    # Check for existing Elastic IP or create new one
+    log_info "Checking for Elastic IP..."
+    EXISTING_EIP=$(aws ec2 describe-addresses --filters "Name=tag:Name,Values=$PROJECT_NAME" --query 'Addresses[0].AllocationId' --output text)
+    
+    if [ "$EXISTING_EIP" != "None" ] && [ -n "$EXISTING_EIP" ]; then
+        log_info "Using existing Elastic IP: $EXISTING_EIP"
+        ALLOCATION_ID="$EXISTING_EIP"
+    else
+        log_info "Creating new Elastic IP..."
+        ALLOCATION_ID=$(aws ec2 allocate-address \
+            --domain vpc \
+            --tag-specifications "ResourceType=elastic-ip,Tags=[{Key=Name,Value=$PROJECT_NAME},{Key=Project,Value=$PROJECT_NAME}]" \
+            --query 'AllocationId' \
+            --output text)
+        log_success "Created Elastic IP: $ALLOCATION_ID"
+    fi
+    
+    # Associate Elastic IP with instance
+    log_info "Associating Elastic IP with instance..."
+    ASSOCIATION_ID=$(aws ec2 associate-address \
+        --instance-id "$INSTANCE_ID" \
+        --allocation-id "$ALLOCATION_ID" \
+        --query 'AssociationId' \
+        --output text)
+    
+    # Get the Elastic IP address
+    ELASTIC_IP=$(aws ec2 describe-addresses \
+        --allocation-ids "$ALLOCATION_ID" \
+        --query 'Addresses[0].PublicIp' \
+        --output text)
+    
+    echo "ELASTIC_IP=$ELASTIC_IP" >> .server-config
+    echo "ALLOCATION_ID=$ALLOCATION_ID" >> .server-config
+    
+    log_success "EC2 instance created: $INSTANCE_ID with Elastic IP: $ELASTIC_IP"
 }
 
 # Setup EC2 instance with dependencies only
@@ -280,7 +314,7 @@ main() {
     echo "  2. Click 'New repository secret' and add these two secrets:"
     echo ""
     echo "     Secret Name: EC2_HOST"
-    echo "     Secret Value: $INSTANCE_IP"
+    echo "     Secret Value: $ELASTIC_IP"
     echo ""
     echo "     Secret Name: EC2_SSH_PRIVATE_KEY"
     echo "     Secret Value: (Copy the contents of ~/.ssh/$KEY_NAME.pem)"
