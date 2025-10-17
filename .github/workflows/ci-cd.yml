@@ -73,6 +73,7 @@ jobs:
         run: |
           cd backend
           cp .env.example .env
+          php artisan key:generate
           sed -i 's/DB_HOST=mysql/DB_HOST=127.0.0.1/' .env
           sed -i 's/DB_DATABASE=byu_590r_app/DB_DATABASE=byu_590r_app_test/' .env
           echo "DEBUG_MODE=true" >> .env
