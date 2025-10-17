@@ -182,6 +182,59 @@ aws-teardown:
 	cd devops && ./teardown.sh
 	@echo "AWS teardown complete!"
 
+# AWS cleanup commands for orphaned resources
+aws-list-instances:
+	@echo "Listing all BYU 590R EC2 instances:"
+	@aws ec2 describe-instances \
+		--filters "Name=tag:Name,Values=byu-590r-server" \
+		--query 'Reservations[*].Instances[*].[InstanceId,State.Name,PublicIpAddress,Tags[?Key==`CreatedAt`].Value|[0]]' \
+		--output table
+
+aws-cleanup-orphaned:
+	@echo "Cleaning up orphaned AWS resources..."
+	@echo "Instances older than 24 hours will be terminated:"
+	@aws ec2 describe-instances \
+		--filters "Name=tag:Name,Values=byu-590r-server" \
+		--query 'Reservations[*].Instances[?LaunchTime<`'$$(date -d '24 hours ago' -u +%Y-%m-%dT%H:%M:%S)'`].[InstanceId,State.Name,LaunchTime]' \
+		--output table
+	@echo "Run 'make aws-terminate-orphaned' to actually terminate these instances"
+
+aws-terminate-orphaned:
+	@echo "Terminating orphaned instances older than 24 hours..."
+	@ORPHANED_INSTANCES=$$(aws ec2 describe-instances \
+		--filters "Name=tag:Name,Values=byu-590r-server" \
+		--query 'Reservations[*].Instances[?LaunchTime<`'$$(date -d '24 hours ago' -u +%Y-%m-%dT%H:%M:%S)'`].[InstanceId]' \
+		--output text); \
+	if [ -n "$$ORPHANED_INSTANCES" ]; then \
+		echo "Terminating instances: $$ORPHANED_INSTANCES"; \
+		aws ec2 terminate-instances --instance-ids $$ORPHANED_INSTANCES; \
+		echo "Orphaned instances terminated successfully!"; \
+	else \
+		echo "No orphaned instances found"; \
+	fi
+
+aws-cleanup-all:
+	@echo "⚠️  WARNING: This will terminate ALL BYU 590R instances!"
+	@echo "Current instances:"
+	@$(MAKE) aws-list-instances
+	@echo ""
+	@read -p "Are you sure you want to terminate ALL instances? (type 'yes' to confirm): " confirm; \
+	if [ "$$confirm" = "yes" ]; then \
+		ALL_INSTANCES=$$(aws ec2 describe-instances \
+			--filters "Name=tag:Name,Values=byu-590r-server" \
+			--query 'Reservations[*].Instances[*].InstanceId' \
+			--output text); \
+		if [ -n "$$ALL_INSTANCES" ]; then \
+			echo "Terminating all instances: $$ALL_INSTANCES"; \
+			aws ec2 terminate-instances --instance-ids $$ALL_INSTANCES; \
+			echo "All instances terminated successfully!"; \
+		else \
+			echo "No instances found to terminate"; \
+		fi; \
+	else \
+		echo "Cleanup cancelled"; \
+	fi
+
 # Help
 help:
 	@echo "Available commands:"
@@ -197,6 +250,10 @@ help:
 	@echo "  build-images - Build Docker images for backend and frontend"
 	@echo "  aws-setup    - Set up AWS EC2 server (GitHub Actions deploys apps)"
 	@echo "  aws-teardown - Tear down AWS environment"
+	@echo "  aws-list-instances - List all BYU 590R EC2 instances"
+	@echo "  aws-cleanup-orphaned - Show orphaned instances (older than 24h)"
+	@echo "  aws-terminate-orphaned - Terminate orphaned instances"
+	@echo "  aws-cleanup-all - Terminate ALL BYU 590R instances (DANGER!)"
 	@echo "  dev          - Start development environment (legacy)"
 	@echo "  logs         - Show all service logs"
 	@echo "  help         - Show this help message"
