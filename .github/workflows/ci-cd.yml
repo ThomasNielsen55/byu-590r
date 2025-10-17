@@ -100,16 +100,24 @@ jobs:
         run: |
           # Copy backend files to EC2
           rsync -avz --delete -e "ssh -o StrictHostKeyChecking=no" \
-            backend/ ubuntu@${{ secrets.EC2_HOST }}:/home/ubuntu/byu-590r-backend/
+            backend/ ubuntu@${{ secrets.EC2_HOST }}:/var/www/html/api/
           
-          # Install dependencies and restart services
+          # Install dependencies and configure Laravel
           ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
-            cd /home/ubuntu/byu-590r-backend
+            cd /var/www/html/api
             composer install --no-dev --optimize-autoloader
             php artisan config:cache
             php artisan route:cache
             php artisan view:cache
-            sudo systemctl restart byu-590r-backend
+            
+            # Set proper permissions
+            sudo chown -R www-data:www-data /var/www/html/api
+            sudo chmod -R 755 /var/www/html/api
+            sudo chmod -R 775 /var/www/html/api/storage
+            sudo chmod -R 775 /var/www/html/api/bootstrap/cache
+            
+            # Restart Apache
+            sudo systemctl reload apache2
           EOF
 
       - name: Deploy Frontend to EC2
@@ -121,11 +129,11 @@ jobs:
           
           # Copy built files to EC2
           rsync -avz --delete -e "ssh -o StrictHostKeyChecking=no" \
-            dist/byu-590r-builder/ ubuntu@${{ secrets.EC2_HOST }}:/var/www/html/
+            dist/byu-590r-builder/ ubuntu@${{ secrets.EC2_HOST }}:/var/www/html/app/
           
-          # Restart Nginx
+          # Restart Apache
           ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
-            sudo systemctl reload nginx
+            sudo systemctl reload apache2
           EOF
 
       - name: Verify Deployment
@@ -135,12 +143,14 @@ jobs:
           
           # Check if services are running
           ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
-            echo "=== Backend Status ==="
-            sudo systemctl status byu-590r-backend --no-pager
-            echo "=== Nginx Status ==="
-            sudo systemctl status nginx --no-pager
+            echo "=== Apache Status ==="
+            sudo systemctl status apache2 --no-pager
             echo "=== MySQL Status ==="
             sudo systemctl status mysql --no-pager
+            echo "=== Laravel API Test ==="
+            curl -f http://localhost/api/hello || echo "API endpoint not responding"
+            echo "=== Frontend Test ==="
+            curl -f http://localhost/app/ || echo "Frontend not responding"
           EOF
 
   deploy-complete:
@@ -157,5 +167,5 @@ jobs:
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: `🚀 **EC2 Deployment Successful!**\n\n✅ **Frontend**: Deployed to EC2\n🔗 **Frontend URL**: http://${{ secrets.EC2_HOST }}\n\n✅ **Backend**: Deployed to EC2\n🔗 **Backend API**: http://${{ secrets.EC2_HOST }}/api\n\n🎉 Your BYU 590R Monorepo is now running on EC2!`
+              body: `🚀 **EC2 Deployment Successful!**\n\n✅ **Frontend**: Deployed to EC2 (Apache)\n🔗 **Frontend URL**: http://app.${{ secrets.EC2_HOST }}\n\n✅ **Backend**: Deployed to EC2 (Apache)\n🔗 **Backend API**: http://api.${{ secrets.EC2_HOST }}\n\n🎉 Your BYU 590R Monorepo is now running on EC2 with Apache!`
             })
