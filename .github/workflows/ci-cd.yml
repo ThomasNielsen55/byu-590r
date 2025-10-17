@@ -215,6 +215,19 @@ jobs:
     if: github.ref == 'refs/heads/main'
 
     steps:
+      - name: Generate final Laravel application key
+        run: |
+          ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
+            cd /var/www/html/api
+            sudo chown -R ubuntu:ubuntu .
+            sudo chmod -R 775 storage bootstrap/cache
+            sudo chown -R www-data:www-data .
+            sudo chmod -R 755 .
+            sudo chmod -R 775 storage bootstrap/cache
+            php artisan key:generate --force
+            echo "Final application key generated successfully"
+          EOF
+
       - name: Comment deployment success
         uses: actions/github-script@v7
         with:
