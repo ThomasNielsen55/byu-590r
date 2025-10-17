@@ -27,6 +27,7 @@ logs/
 # Temporary files
 *.tmp
 *.temp
+setup-server.sh
 
 # Environment files
 .env
