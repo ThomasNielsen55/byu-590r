@@ -4,10 +4,10 @@ A student-friendly monorepo project with Laravel backend, Angular frontend, and 
 
 ## Features
 
-- **Laravel Backend**: RESTful API with local MySQL
+- **Laravel Backend**: RESTful API with MySQL database
 - **Angular Frontend**: Modern web application with TypeScript
-- **AWS Infrastructure**: K3s on EC2, local MySQL
-- **Static IP Access**: Elastic IP for consistent access
+- **AWS Infrastructure**: EC2 instance with Nginx, PHP, Node.js, MySQL
+- **GitHub Actions CI/CD**: Automated testing and deployment
 - **Cost Optimized**: ~$0-2/month with free tier usage
 
 ## Quick Start
@@ -27,33 +27,37 @@ A student-friendly monorepo project with Laravel backend, Angular frontend, and 
 
 ### AWS Deployment
 
-1. **Quick setup with automated script**:
+1. **Setup EC2 server** (one-time setup):
 
    ```bash
-   make aws-setup
+   cd devops
+   chmod +x setup-ec2-server.sh
+   ./setup-ec2-server.sh
    ```
 
-   This script will:
+2. **Configure GitHub Actions**:
 
-   - Ask for your AWS credentials and configuration
-   - Create EC2 instance with MySQL and K3s
-   - Build and deploy your application
-   - Provide you with access URLs
+   - Add these secrets to your GitHub repository:
+     - `EC2_HOST`: Your EC2 public IP
+     - `EC2_SSH_PRIVATE_KEY`: Contents of your SSH private key
+   - See `.github/README.md` for detailed instructions
 
-2. **Manual setup** (if you prefer step-by-step):
+3. **Deploy via GitHub Actions**:
 
+   - Push changes to `main` branch
+   - GitHub Actions will automatically test and deploy
+   - Check the Actions tab for deployment status
+
+4. **Access your application**:
+
+   - Frontend: `http://YOUR_EC2_IP`
+   - Backend API: `http://YOUR_EC2_IP/api`
+
+5. **Clean up when done**:
    ```bash
-   # See ULTRA_CHEAP_SETUP.md for detailed instructions
-   ```
-
-3. **Access your application**:
-
-   - Frontend: `http://YOUR_ELASTIC_IP:30080`
-   - Backend API: `http://YOUR_ELASTIC_IP:30081/api`
-
-4. **Clean up when done**:
-   ```bash
-   make aws-teardown
+   cd devops
+   chmod +x teardown.sh
+   ./teardown.sh
    ```
 
 ## Available Commands
@@ -66,17 +70,19 @@ A student-friendly monorepo project with Laravel backend, Angular frontend, and 
 
 ### AWS Deployment
 
-- `make aws-setup` - Automated AWS setup (EC2 + K3s + MySQL)
-- `make aws-teardown` - Clean up all AWS resources
+- `cd devops && ./setup-ec2-server.sh` - Setup EC2 server (one-time)
+- `cd devops && ./teardown.sh` - Clean up all AWS resources
 
 ## Project Structure
 
 ```
 ├── backend/          # Laravel API
 ├── web-app/          # Angular frontend
+├── .github/workflows/ # GitHub Actions CI/CD
+│   ├── backend-deploy.yml
+│   └── frontend-deploy.yml
 ├── devops/           # AWS deployment configurations
-│   ├── jsonnet/      # Kubernetes manifests
-│   ├── setup.sh      # Automated AWS setup script
+│   ├── setup-ec2-server.sh # EC2 server setup
 │   └── teardown.sh   # AWS cleanup script
 ├── ULTRA_CHEAP_SETUP.md # Manual setup guide
 └── Makefile         # Development commands
@@ -96,11 +102,11 @@ A student-friendly monorepo project with Laravel backend, Angular frontend, and 
 
 This project teaches:
 
-- Kubernetes deployments (K3s on EC2)
+- Web application deployment (Laravel + Angular)
 - Database management (MySQL installation and configuration)
-- AWS managed services (EC2, ECR)
-- Infrastructure as Code with Jsonnet
+- AWS managed services (EC2)
 - CI/CD with GitHub Actions
-- Container orchestration and scaling
+- Server configuration and automation
+- Infrastructure management
 
 Perfect for learning modern DevOps practices at minimal cost!

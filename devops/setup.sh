@@ -125,7 +125,7 @@ create_ec2_instance() {
     
     # Create EC2 instance
     INSTANCE_ID=$(aws ec2 run-instances \
-        --image-id ami-0c02fb55956c7d316 \
+        --image-id ami-04f34746e5e1ec0fe \
         --instance-type t2.micro \
         --key-name "$KEY_NAME" \
         --security-group-ids "$SECURITY_GROUP" \

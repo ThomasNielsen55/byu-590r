@@ -31,20 +31,24 @@ log_error() {
 
 # Check if config file exists
 check_config() {
-    if [ ! -f ".aws-config" ]; then
-        log_error "Configuration file .aws-config not found"
-        log_error "Please run setup.sh first or check if you're in the correct directory"
+    if [ ! -f ".server-config" ]; then
+        log_error "Configuration file .server-config not found"
+        log_error "Please run setup-ec2-server.sh first or check if you're in the correct directory"
         exit 1
     fi
     
     # Load configuration
-    source .aws-config
+    source .server-config
     
     log_info "Loaded configuration:"
     echo "  Instance ID: $INSTANCE_ID"
     echo "  Instance IP: $INSTANCE_IP"
-    echo "  Elastic IP: $ELASTIC_IP"
-    echo "  Allocation ID: $ALLOCATION_ID"
+    if [ -n "$ALLOCATION_ID" ]; then
+        echo "  Allocation ID: $ALLOCATION_ID"
+    fi
+    if [ -n "$ELASTIC_IP" ]; then
+        echo "  Elastic IP: $ELASTIC_IP"
+    fi
 }
 
 # Confirm teardown
@@ -52,7 +56,9 @@ confirm_teardown() {
     log_warning "This will permanently delete all AWS resources!"
     log_warning "The following resources will be deleted:"
     echo "  - EC2 instance: $INSTANCE_ID"
-    echo "  - Elastic IP: $ELASTIC_IP"
+    if [ -n "$ALLOCATION_ID" ]; then
+        echo "  - Elastic IP: $ELASTIC_IP"
+    fi
     echo "  - All data on the instance (including MySQL database)"
     echo ""
     
@@ -100,18 +106,18 @@ release_elastic_ip() {
     fi
 }
 
-# Clean up ECR repositories
+# Clean up ECR repositories (if any exist)
 cleanup_ecr() {
-    log_info "Cleaning up ECR repositories..."
+    log_info "Checking for ECR repositories to clean up..."
     
     # Get account ID
     ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
     
-    # Delete ECR repositories
-    aws ecr delete-repository --repository-name byu-590r-backend --force 2>/dev/null || true
-    aws ecr delete-repository --repository-name byu-590r-frontend --force 2>/dev/null || true
+    # Delete ECR repositories if they exist
+    aws ecr delete-repository --repository-name byu-590r-backend --force 2>/dev/null || log_info "No backend ECR repository found"
+    aws ecr delete-repository --repository-name byu-590r-frontend --force 2>/dev/null || log_info "No frontend ECR repository found"
     
-    log_success "ECR repositories cleaned up"
+    log_success "ECR cleanup completed"
 }
 
 # Clean up local files
@@ -119,10 +125,10 @@ cleanup_local() {
     log_info "Cleaning up local files..."
     
     # Remove config file
-    rm -f .aws-config
+    rm -f .server-config
     
     # Remove any temporary files
-    rm -f setup-instance.sh deploy-k3s.sh
+    rm -f setup-server.sh nginx-config laravel-service
     
     log_success "Local files cleaned up"
 }

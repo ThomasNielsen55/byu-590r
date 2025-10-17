@@ -7,7 +7,7 @@
   },
   "newProjectRoot": "projects",
   "projects": {
-    "ai-quiz-builder": {
+    "byu-590r-builder": {
       "projectType": "application",
       "schematics": {},
       "root": "",
@@ -17,7 +17,7 @@
         "build": {
           "builder": "@angular-devkit/build-angular:application",
           "options": {
-            "outputPath": "dist/ai-quiz-builder",
+            "outputPath": "dist/byu-590r-builder",
             "index": "src/index.html",
             "browser": "src/main.ts",
             "polyfills": ["zone.js"],
@@ -59,10 +59,10 @@
           "builder": "@angular-devkit/build-angular:dev-server",
           "configurations": {
             "production": {
-              "buildTarget": "ai-quiz-builder:build:production"
+              "buildTarget": "byu-590r-builder:build:production"
             },
             "development": {
-              "buildTarget": "ai-quiz-builder:build:development"
+              "buildTarget": "byu-590r-builder:build:development"
             }
           },
           "defaultConfiguration": "development"

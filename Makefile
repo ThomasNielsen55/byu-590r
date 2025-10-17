@@ -173,9 +173,9 @@ build-images:
 
 # AWS deployment commands
 aws-setup:
-	@echo "Setting up AWS environment (EC2 + K3s + MySQL)..."
-	cd devops && ./setup.sh
-	@echo "AWS setup complete!"
+	@echo "Setting up AWS EC2 server (GitHub Actions will handle deployment)..."
+	cd devops && ./setup-ec2-server.sh
+	@echo "AWS server setup complete! Configure GitHub Actions secrets and push to deploy."
 
 aws-teardown:
 	@echo "Tearing down AWS environment..."
@@ -195,7 +195,7 @@ help:
 	@echo "  setup-backend - Setup Laravel backend (.env, key generation)"
 	@echo "  migrate      - Run database migrations"
 	@echo "  build-images - Build Docker images for backend and frontend"
-	@echo "  aws-setup    - Set up AWS environment (EC2 + K3s + MySQL)"
+	@echo "  aws-setup    - Set up AWS EC2 server (GitHub Actions deploys apps)"
 	@echo "  aws-teardown - Tear down AWS environment"
 	@echo "  dev          - Start development environment (legacy)"
 	@echo "  logs         - Show all service logs"
