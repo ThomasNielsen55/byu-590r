@@ -33,7 +33,7 @@ log_error() {
 # Configuration
 AWS_REGION="us-west-1"
 KEY_NAME="byu-590r"
-SECURITY_GROUP="sg-016e86262e63e073b"
+SECURITY_GROUP="sg-07cb07cc76067db76"
 PROJECT_NAME="byu-590r"
 
 log_info "Starting EC2 server setup (applications will be deployed via GitHub Actions)..."
