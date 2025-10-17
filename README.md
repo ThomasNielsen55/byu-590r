@@ -79,11 +79,11 @@ A student-friendly monorepo project with Laravel backend, Angular frontend, and 
 ├── backend/          # Laravel API
 ├── web-app/          # Angular frontend
 ├── .github/workflows/ # GitHub Actions CI/CD
-│   ├── backend-deploy.yml
-│   └── frontend-deploy.yml
+│   └── ci-cd.yml     # Main CI/CD pipeline
 ├── devops/           # AWS deployment configurations
 │   ├── setup-ec2-server.sh # EC2 server setup
-│   └── teardown.sh   # AWS cleanup script
+│   ├── teardown.sh   # AWS cleanup script
+│   └── fix-github-actions-iam.sh # IAM permissions fix
 ├── ULTRA_CHEAP_SETUP.md # Manual setup guide
 └── Makefile         # Development commands
 ```
@@ -96,7 +96,6 @@ A student-friendly monorepo project with Laravel backend, Angular frontend, and 
 ## Documentation
 
 - **[ULTRA_CHEAP_SETUP.md](ULTRA_CHEAP_SETUP.md)** - Complete ultra-cheap setup guide (~$0-2/month)
-- **[COST_OPTIONS.md](COST_OPTIONS.md)** - Compare different Kubernetes deployment options
 
 ## Learning Objectives
 

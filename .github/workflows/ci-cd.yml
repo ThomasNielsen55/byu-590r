@@ -82,7 +82,7 @@ jobs:
           cd backend
           php artisan test
 
-  build-and-push-ecr:
+  deploy-to-ec2:
     needs: [test-frontend, test-backend]
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
@@ -91,97 +91,71 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
+          ssh-private-key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
 
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Build, tag, and push backend image
-        env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          ECR_REPOSITORY: byu-590r-backend
-          IMAGE_TAG: ${{ github.sha }}
+      - name: Deploy Backend to EC2
         run: |
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG ./backend
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:latest ./backend
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          # Copy backend files to EC2
+          rsync -avz --delete -e "ssh -o StrictHostKeyChecking=no" \
+            backend/ ubuntu@${{ secrets.EC2_HOST }}:/home/ubuntu/byu-590r-backend/
+          
+          # Install dependencies and restart services
+          ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
+            cd /home/ubuntu/byu-590r-backend
+            composer install --no-dev --optimize-autoloader
+            php artisan config:cache
+            php artisan route:cache
+            php artisan view:cache
+            sudo systemctl restart byu-590r-backend
+          EOF
 
-      - name: Build, tag, and push frontend image
-        env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          ECR_REPOSITORY: byu-590r-frontend
-          IMAGE_TAG: ${{ github.sha }}
+      - name: Deploy Frontend to EC2
         run: |
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG ./web-app
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:latest ./web-app
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          # Build Angular app locally
+          cd web-app
+          npm install
+          npm run build:prod
+          
+          # Copy built files to EC2
+          rsync -avz --delete -e "ssh -o StrictHostKeyChecking=no" \
+            dist/byu-590r-builder/ ubuntu@${{ secrets.EC2_HOST }}:/var/www/html/
+          
+          # Restart Nginx
+          ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
+            sudo systemctl reload nginx
+          EOF
 
-  deploy-aws-eks:
-    needs: [build-and-push-ecr]
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
-
-      - name: Update kubeconfig
+      - name: Verify Deployment
         run: |
-          aws eks update-kubeconfig --region ${{ secrets.AWS_REGION }} --name ${{ secrets.EKS_CLUSTER_NAME }}
-
-      - name: Install jsonnet
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y jsonnet
-
-      - name: Deploy to AWS EKS
-        run: |
-          cd devops/scripts
-          ./aws-deploy.sh deploy
-        env:
-          EKS_CLUSTER_NAME: ${{ secrets.EKS_CLUSTER_NAME }}
-          AWS_REGION: ${{ secrets.AWS_REGION }}
-
-      - name: Wait for deployment
-        run: |
-          kubectl wait --for=condition=available --timeout=600s deployment/backend -n byu-590r
-          kubectl wait --for=condition=available --timeout=600s deployment/frontend -n byu-590r
+          # Wait a moment for services to start
+          sleep 10
+          
+          # Check if services are running
+          ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
+            echo "=== Backend Status ==="
+            sudo systemctl status byu-590r-backend --no-pager
+            echo "=== Nginx Status ==="
+            sudo systemctl status nginx --no-pager
+            echo "=== MySQL Status ==="
+            sudo systemctl status mysql --no-pager
+          EOF
 
   deploy-complete:
-    needs: [deploy-aws-eks]
+    needs: [deploy-to-ec2]
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
 
     steps:
-      - name: Get ALB URLs
-        id: get-urls
-        run: |
-          kubectl get ingress -n byu-590r -o jsonpath='{.items[0].status.loadBalancer.ingress[0].hostname}' > alb-hostname.txt
-          echo "alb-hostname=$(cat alb-hostname.txt)" >> $GITHUB_OUTPUT
-
-      - name: Comment deployment URLs
+      - name: Comment deployment success
         uses: actions/github-script@v7
         with:
           script: |
-            const albHostname = '${{ steps.get-urls.outputs.alb-hostname }}';
             github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: `🚀 **AWS EKS Deployment Successful!**\n\n✅ **Frontend**: Deployed to AWS EKS\n🔗 **Frontend URL**: https://byu-590r.com\n\n✅ **Backend**: Deployed to AWS EKS\n🔗 **Backend API**: https://api.byu-590r.com\n\n🌐 **ALB Hostname**: ${albHostname}\n\n🎉 Your BYU 590R Monorepo is now running on AWS EKS with RDS and Secrets Manager!`
+              body: `🚀 **EC2 Deployment Successful!**\n\n✅ **Frontend**: Deployed to EC2\n🔗 **Frontend URL**: http://${{ secrets.EC2_HOST }}\n\n✅ **Backend**: Deployed to EC2\n🔗 **Backend API**: http://${{ secrets.EC2_HOST }}/api\n\n🎉 Your BYU 590R Monorepo is now running on EC2!`
             })

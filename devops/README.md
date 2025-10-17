@@ -27,11 +27,6 @@ chmod +x setup-ec2-server.sh
 - Creates systemd service for Laravel (but doesn't start it)
 - Prepares directories for GitHub Actions deployment
 
-### `setup.sh` (Legacy)
-
-**Purpose**: Original setup script (kept for reference)
-**Status**: Not recommended for use - use GitHub Actions instead
-
 ### `teardown.sh`
 
 **Purpose**: Cleanup script to terminate EC2 resources
@@ -46,8 +41,7 @@ chmod +x teardown.sh
 
 The actual deployment is handled by GitHub Actions workflows in `.github/workflows/`:
 
-- **`backend-deploy.yml`**: Tests and deploys Laravel backend
-- **`frontend-deploy.yml`**: Tests and deploys Angular frontend
+- **`ci-cd.yml`**: Main CI/CD pipeline that tests and deploys both backend and frontend to EC2
 
 ## Workflow
 
@@ -61,11 +55,10 @@ The actual deployment is handled by GitHub Actions workflows in `.github/workflo
 - **`.server-config`**: Created by setup script, contains EC2 instance details
 - **`.aws-config`**: Legacy config file (can be removed)
 
-## Directories
+## Scripts
 
-- **`jsonnet/`**: Kubernetes manifests (for future K8s deployment)
-- **`k8s/`**: Kubernetes configurations (for future use)
-- **`monitoring/`**: Monitoring configurations (for future use)
+- **`fix-github-actions-iam.sh`**: Fixes AWS IAM permissions for GitHub Actions (if needed)
+- **`cleanup-existing-instances.sh`**: Cleans up any existing EC2 instances
 
 ## Security
 
