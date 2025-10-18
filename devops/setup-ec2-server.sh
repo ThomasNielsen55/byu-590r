@@ -204,7 +204,12 @@ create_s3_bucket() {
             --bucket "$BUCKET_NAME" \
             --public-access-block-configuration "BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true"
         
-        log_success "S3 bucket '$BUCKET_NAME' created successfully"
+        # Tag the bucket for proper identification
+        aws s3api put-bucket-tagging \
+            --bucket "$BUCKET_NAME" \
+            --tagging 'TagSet=[{Key=Name,Value=byu-590r},{Key=Project,Value=byu-590r}]'
+        
+        log_success "S3 bucket '$BUCKET_NAME' created successfully with tags"
     fi
     
     echo "S3_BUCKET=$BUCKET_NAME" >> .server-config

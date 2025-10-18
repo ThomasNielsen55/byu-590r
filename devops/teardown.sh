@@ -70,20 +70,32 @@ check_config() {
             log_info "No existing BYU 590R instances found"
         fi
         
-        # Find project S3 buckets
-        EXISTING_BUCKETS=$(aws s3api list-buckets --query 'Buckets[?starts_with(Name, `byu-590r-`)].Name' --output text)
-        
-        if [ -n "$EXISTING_BUCKETS" ]; then
-            log_warning "Found existing BYU 590R S3 buckets:"
-            for bucket in $EXISTING_BUCKETS; do
-                echo "  Bucket: $bucket"
-            done
-            
-            # Use the first bucket for cleanup
-            S3_BUCKET=$(echo "$EXISTING_BUCKETS" | awk '{print $1}')
-        else
-            log_info "No existing BYU 590R S3 buckets found"
-        fi
+                # Find project S3 buckets by tags
+                log_info "Searching for BYU 590R S3 buckets by tags..."
+                EXISTING_BUCKETS=""
+                
+                # Get all buckets and check their tags
+                ALL_BUCKETS=$(aws s3api list-buckets --query 'Buckets[].Name' --output text)
+                
+                for bucket in $ALL_BUCKETS; do
+                    # Check if bucket has BYU 590R tags
+                    BUCKET_TAGS=$(aws s3api get-bucket-tagging --bucket "$bucket" 2>/dev/null || echo "")
+                    if echo "$BUCKET_TAGS" | grep -q "byu-590r"; then
+                        EXISTING_BUCKETS="$EXISTING_BUCKETS $bucket"
+                    fi
+                done
+                
+                if [ -n "$EXISTING_BUCKETS" ]; then
+                    log_warning "Found existing BYU 590R S3 buckets:"
+                    for bucket in $EXISTING_BUCKETS; do
+                        echo "  Bucket: $bucket"
+                    done
+                    
+                    # Use the first bucket for cleanup
+                    S3_BUCKET=$(echo "$EXISTING_BUCKETS" | awk '{print $1}')
+                else
+                    log_info "No existing BYU 590R S3 buckets found"
+                fi
         
         # Find project Elastic IPs
         EXISTING_EIPS=$(aws ec2 describe-addresses --filters "Name=tag:Name,Values=byu-590r" --query 'Addresses[*].[AllocationId,PublicIp]' --output text)
@@ -124,8 +136,22 @@ confirm_teardown() {
     if [ -n "$ALLOCATION_ID" ]; then
         echo "  - Elastic IP: $ELASTIC_IP"
     fi
-    if [ -n "$S3_BUCKET" ]; then
-        echo "  - S3 bucket: $S3_BUCKET (and all contents)"
+    # Show S3 buckets that will be deleted
+    ALL_BUCKETS=$(aws s3api list-buckets --query 'Buckets[].Name' --output text)
+    BYU_BUCKETS=""
+    
+    for bucket in $ALL_BUCKETS; do
+        BUCKET_TAGS=$(aws s3api get-bucket-tagging --bucket "$bucket" 2>/dev/null || echo "")
+        if echo "$BUCKET_TAGS" | grep -q "byu-590r"; then
+            BYU_BUCKETS="$BYU_BUCKETS $bucket"
+        fi
+    done
+    
+    if [ -n "$BYU_BUCKETS" ]; then
+        echo "  - S3 buckets (and all contents):"
+        for bucket in $BYU_BUCKETS; do
+            echo "    * $bucket"
+        done
     fi
     echo "  - All data on instances (including MySQL database)"
     echo ""
@@ -225,30 +251,64 @@ release_elastic_ip() {
     fi
 }
 
-# Delete S3 bucket
-delete_s3_bucket() {
-    if [ -n "$S3_BUCKET" ]; then
-        log_info "Deleting S3 bucket..."
-        
-        # Check if bucket exists
-        if aws s3api head-bucket --bucket "$S3_BUCKET" 2>/dev/null; then
-            log_info "Deleting all objects in S3 bucket: $S3_BUCKET"
-            
-            # Delete all objects and versions
-            aws s3api delete-objects --bucket "$S3_BUCKET" --delete "$(aws s3api list-object-versions --bucket "$S3_BUCKET" --query '{Objects: Versions[].{Key:Key,VersionId:VersionId}}')" 2>/dev/null || true
-            
-            # Delete all objects (non-versioned)
-            aws s3 rm s3://"$S3_BUCKET" --recursive 2>/dev/null || true
-            
-            # Delete the bucket
-            aws s3api delete-bucket --bucket "$S3_BUCKET" 2>/dev/null || true
-            
-            log_success "S3 bucket '$S3_BUCKET' deleted"
-        else
-            log_info "S3 bucket '$S3_BUCKET' does not exist or already deleted"
+# Delete all S3 buckets
+delete_s3_buckets() {
+    log_info "Finding all BYU 590R S3 buckets..."
+    
+    # Get all buckets and check their tags
+    ALL_BUCKETS=$(aws s3api list-buckets --query 'Buckets[].Name' --output text)
+    BYU_BUCKETS=""
+    
+    for bucket in $ALL_BUCKETS; do
+        # Check if bucket has BYU 590R tags
+        BUCKET_TAGS=$(aws s3api get-bucket-tagging --bucket "$bucket" 2>/dev/null || echo "")
+        if echo "$BUCKET_TAGS" | grep -q "byu-590r"; then
+            BYU_BUCKETS="$BYU_BUCKETS $bucket"
         fi
+    done
+    
+    if [ -n "$BYU_BUCKETS" ]; then
+        log_info "Found BYU 590R S3 buckets to delete:"
+        for bucket in $BYU_BUCKETS; do
+            echo "  Bucket: $bucket"
+        done
+        
+        # Delete each bucket
+        for bucket in $BYU_BUCKETS; do
+            log_info "Deleting S3 bucket: $bucket"
+            
+            # Check if bucket exists
+            if aws s3api head-bucket --bucket "$bucket" 2>/dev/null; then
+                log_info "Emptying bucket: $bucket"
+                
+                # Delete all object versions (for versioned buckets)
+                aws s3api list-object-versions --bucket "$bucket" --query '{Objects: Versions[].{Key:Key,VersionId:VersionId}}' --output json > /tmp/versions.json 2>/dev/null || echo '{"Objects":[]}' > /tmp/versions.json
+                if [ "$(cat /tmp/versions.json | jq '.Objects | length')" -gt 0 ]; then
+                    aws s3api delete-objects --bucket "$bucket" --delete file:///tmp/versions.json 2>/dev/null || true
+                fi
+                
+                # Delete all delete markers
+                aws s3api list-object-versions --bucket "$bucket" --query '{Objects: DeleteMarkers[].{Key:Key,VersionId:VersionId}}' --output json > /tmp/markers.json 2>/dev/null || echo '{"Objects":[]}' > /tmp/markers.json
+                if [ "$(cat /tmp/markers.json | jq '.Objects | length')" -gt 0 ]; then
+                    aws s3api delete-objects --bucket "$bucket" --delete file:///tmp/markers.json 2>/dev/null || true
+                fi
+                
+                # Delete all objects (non-versioned)
+                aws s3 rm s3://"$bucket" --recursive 2>/dev/null || true
+                
+                # Delete the bucket
+                aws s3api delete-bucket --bucket "$bucket" 2>/dev/null || true
+                
+                log_success "S3 bucket '$bucket' deleted successfully"
+            else
+                log_info "S3 bucket '$bucket' does not exist or already deleted"
+            fi
+        done
+        
+        # Clean up temporary files
+        rm -f /tmp/versions.json /tmp/markers.json
     else
-        log_info "No S3 bucket name found in configuration"
+        log_info "No BYU 590R S3 buckets found to delete"
     fi
 }
 
@@ -313,7 +373,7 @@ main() {
     stop_instances
     terminate_instances
     release_elastic_ip
-    delete_s3_bucket
+    delete_s3_buckets
     cleanup_ecr
     cleanup_local
     cleanup_config
