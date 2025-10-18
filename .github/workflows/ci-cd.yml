@@ -69,7 +69,7 @@ jobs:
       - name: Install Composer dependencies
         run: |
           cd backend
-          composer install --no-progress --prefer-dist --optimize-autoloader
+          composer install -q --no-ansi --no-interaction --no-scripts --no-progress --prefer-dist
 
       - name: Setup Laravel environment
         run: |
@@ -215,7 +215,7 @@ jobs:
             
             # Use make commands for deployment
             make setup-backend-ec2
-            composer install --no-dev --optimize-autoloader
+            composer install -q --no-ansi --no-interaction --no-scripts --no-progress --prefer-dist --no-dev --optimize-autoloader
             
             # Generate application key (ensure clean generation)
             php artisan key:generate --show > /tmp/app_key
