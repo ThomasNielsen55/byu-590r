@@ -32,7 +32,22 @@ jobs:
         working-directory: ./backend
 
       - name: Install Dependencies
-        run: composer install -q --no-ansi --no-interaction --no-scripts --no-progress --prefer-dist
+        run: |
+          # Try install first, fall back to update if lock file is incompatible
+          set +e
+          OUTPUT=$(composer install -q --no-ansi --no-interaction --no-scripts --no-progress --prefer-dist 2>&1)
+          EXIT_CODE=$?
+          set -e
+          
+          if [ $EXIT_CODE -eq 0 ]; then
+            echo "Composer install succeeded"
+          elif echo "$OUTPUT" | grep -q "does not contain a compatible set of packages"; then
+            echo "Lock file incompatible, running composer update..."
+            composer update -q --no-ansi --no-interaction --no-scripts --no-progress --prefer-dist
+          else
+            echo "Composer install failed: $OUTPUT"
+            exit $EXIT_CODE
+          fi
         working-directory: ./backend
 
       - name: Generate key
@@ -95,8 +110,21 @@ jobs:
           ssh ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
           cd /tmp/deploy-backend
 
-          # Install dependencies
-          composer install --no-dev --optimize-autoloader
+          # Install dependencies (try install, fall back to update if incompatible)
+          set +e
+          OUTPUT=$(composer install --no-dev --optimize-autoloader 2>&1)
+          EXIT_CODE=$?
+          set -e
+          
+          if [ $EXIT_CODE -eq 0 ]; then
+            echo "Composer install succeeded"
+          elif echo "$OUTPUT" | grep -q "does not contain a compatible set of packages"; then
+            echo "Lock file incompatible, running composer update..."
+            composer update --no-dev --optimize-autoloader
+          else
+            echo "Composer install failed: $OUTPUT"
+            exit $EXIT_CODE
+          fi
 
           # Create .env if it doesn't exist
           if [ ! -f .env ]; then
