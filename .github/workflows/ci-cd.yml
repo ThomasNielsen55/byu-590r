@@ -226,9 +226,6 @@ jobs:
             
             # Set APP_ENV to production for deployment
             sed -i "s/APP_ENV=.*/APP_ENV=production/" .env
-            
-            # Use make commands for deployment
-            make setup-backend-ec2
             # Try install first, fall back to update if lock file is incompatible
             set +e
             OUTPUT=$(composer install -q --no-ansi --no-interaction --no-scripts --no-progress --prefer-dist --no-dev --optimize-autoloader 2>&1)
@@ -245,10 +242,10 @@ jobs:
               exit $EXIT_CODE
             fi
             
-            # Generate application key (ensure clean generation)
-            php artisan key:generate --show > /tmp/app_key
-            sed -i "s/APP_KEY=.*/APP_KEY=$(cat /tmp/app_key)/" .env
-            rm /tmp/app_key
+            # Generate application key if not set
+            if ! grep -q "APP_KEY=" .env || grep -q "APP_KEY=$" .env; then
+              php artisan key:generate
+            fi
             
             # Clear config cache to ensure new key is loaded
             rm -f bootstrap/cache/config.php
