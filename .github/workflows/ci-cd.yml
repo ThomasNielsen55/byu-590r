@@ -262,13 +262,15 @@ jobs:
             sudo mkdir -p /var/www/html/api/storage/app
             sudo mkdir -p /var/www/html/api/bootstrap/cache
             
-            # Set proper permissions for Apache (before running artisan commands)
-            sudo chown -R www-data:www-data /var/www/html/api
+            # Set ownership to ubuntu:www-data so both ubuntu (for artisan commands) and www-data (for Apache) can write
+            sudo chown -R ubuntu:www-data /var/www/html/api
             sudo chmod -R 755 /var/www/html/api
+            
+            # Set writable permissions for storage and cache directories (775 allows group write)
             sudo chmod -R 775 /var/www/html/api/storage
             sudo chmod -R 775 /var/www/html/api/bootstrap/cache
             
-            # Ensure Laravel can write to all necessary directories
+            # Ensure all storage subdirectories have correct permissions
             sudo chmod -R 775 /var/www/html/api/storage/logs
             sudo chmod -R 775 /var/www/html/api/storage/framework
             sudo chmod -R 775 /var/www/html/api/storage/framework/cache
@@ -282,6 +284,12 @@ jobs:
             # Configure Laravel for production (skip config cache to avoid APP_KEY issues)
             php artisan route:cache
             php artisan view:cache
+            
+            # Final permission fix after artisan commands (in case files were created)
+            sudo chown -R ubuntu:www-data /var/www/html/api/storage
+            sudo chown -R ubuntu:www-data /var/www/html/api/bootstrap/cache
+            sudo chmod -R 775 /var/www/html/api/storage
+            sudo chmod -R 775 /var/www/html/api/bootstrap/cache
             
             # Restart Apache
             sudo systemctl reload apache2
