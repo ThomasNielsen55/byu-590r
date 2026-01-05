@@ -275,8 +275,8 @@ jobs:
             sudo chmod -R 775 /var/www/html/api/storage/framework/views
             sudo chmod -R 775 /var/www/html/api/storage/app
             
-            # Run database migrations
-            php artisan migrate --force
+            # Run database migrations fresh with seeding
+            php artisan migrate:fresh --seed --force
             
             # Configure Laravel for production (skip config cache to avoid APP_KEY issues)
             php artisan route:cache
