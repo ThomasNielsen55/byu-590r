@@ -28,11 +28,23 @@ jobs:
         run: |
           # Main branch uses repo owner's default secrets
           # Other branches use branch-specific secrets configured by the branch owner
+          SHOULD_DEPLOY="false"
+          EC2_HOST=""
+          SSH_KEY=""
+          
           if [ "$BRANCH_NAME" = "main" ]; then
             EC2_HOST="${{ secrets.EC2_HOST }}"
             SSH_KEY="${{ secrets.EC2_SSH_PRIVATE_KEY }}"
-            echo "Using production credentials for main branch (repo owner's secrets)"
-            SHOULD_DEPLOY="true"
+            
+            if [ -n "$EC2_HOST" ] && [ -n "$SSH_KEY" ]; then
+              echo "Using production credentials for main branch (repo owner's secrets)"
+              SHOULD_DEPLOY="true"
+            else
+              echo "Warning: Default secrets (EC2_HOST or EC2_SSH_PRIVATE_KEY) not found for main branch"
+              echo "Skipping deployment. Please configure GitHub secrets:"
+              echo "  - EC2_HOST"
+              echo "  - EC2_SSH_PRIVATE_KEY"
+            fi
           else
             # For other branches, use branch-specific secrets
             if [ -n "$EC2_HOST_BRANCH" ] && [ -n "$EC2_SSH_KEY_BRANCH" ]; then
@@ -45,20 +57,24 @@ jobs:
               echo "Skipping deployment. To enable deployment, configure:"
               echo "  - EC2_HOST_${BRANCH_NAME}"
               echo "  - EC2_SSH_PRIVATE_KEY_${BRANCH_NAME}"
-              SHOULD_DEPLOY="false"
             fi
           fi
 
-          if [ -z "$EC2_HOST" ] || [ -z "$SSH_KEY" ]; then
-            SHOULD_DEPLOY="false"
-          fi
-
+          # Always set outputs, even if deployment should be skipped
           echo "ec2_host=$EC2_HOST" >> $GITHUB_OUTPUT
           echo "ssh_key<<EOF" >> $GITHUB_OUTPUT
           echo "$SSH_KEY" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
           echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
           echo "should_deploy=$SHOULD_DEPLOY" >> $GITHUB_OUTPUT
+          
+          echo ""
+          echo "=== Deployment Configuration Summary ==="
+          echo "Branch: $BRANCH_NAME"
+          echo "EC2_HOST: ${EC2_HOST:-NOT SET}"
+          echo "SSH_KEY: ${SSH_KEY:+SET}${SSH_KEY:-NOT SET}"
+          echo "Should Deploy: $SHOULD_DEPLOY"
+          echo "========================================"
 
   # Run tests
   test-frontend:
@@ -72,7 +88,9 @@ jobs:
     needs: [test-frontend, test-backend, determine-config]
     uses: ./.github/workflows/deploy-backend.yml
     if: |
+      always() &&
       github.event_name == 'push' &&
+      needs.determine-config.result == 'success' &&
       needs.determine-config.outputs.should_deploy == 'true'
     with:
       ec2_host: ${{ needs.determine-config.outputs.ec2_host }}
@@ -84,8 +102,11 @@ jobs:
     needs: [deploy-backend, determine-config]
     uses: ./.github/workflows/deploy-frontend.yml
     if: |
+      always() &&
       github.event_name == 'push' &&
-      needs.determine-config.outputs.should_deploy == 'true'
+      needs.determine-config.result == 'success' &&
+      needs.determine-config.outputs.should_deploy == 'true' &&
+      (needs.deploy-backend.result == 'success' || needs.deploy-backend.result == 'skipped')
     with:
       ec2_host: ${{ needs.determine-config.outputs.ec2_host }}
     secrets: inherit
@@ -95,8 +116,11 @@ jobs:
     needs: [deploy-frontend, determine-config]
     uses: ./.github/workflows/run-migrations.yml
     if: |
+      always() &&
       github.event_name == 'push' &&
-      needs.determine-config.outputs.should_deploy == 'true'
+      needs.determine-config.result == 'success' &&
+      needs.determine-config.outputs.should_deploy == 'true' &&
+      (needs.deploy-frontend.result == 'success' || needs.deploy-frontend.result == 'skipped')
     with:
       ec2_host: ${{ needs.determine-config.outputs.ec2_host }}
       ssh_key: ${{ needs.determine-config.outputs.ssh_key }}
@@ -107,8 +131,11 @@ jobs:
     needs: [run-migrations, determine-config]
     uses: ./.github/workflows/deploy-complete.yml
     if: |
+      always() &&
       github.event_name == 'push' &&
-      needs.determine-config.outputs.should_deploy == 'true'
+      needs.determine-config.result == 'success' &&
+      needs.determine-config.outputs.should_deploy == 'true' &&
+      (needs.run-migrations.result == 'success' || needs.run-migrations.result == 'skipped')
     with:
       ec2_host: ${{ needs.determine-config.outputs.ec2_host }}
       branch_name: ${{ needs.determine-config.outputs.branch_name }}
