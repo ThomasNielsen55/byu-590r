@@ -150,34 +150,84 @@ jobs:
           php artisan key:generate
 
   deploy-to-ec2:
-    name: Prod Deploy
+    name: Deploy to EC2
     needs: [test-frontend, test-backend]
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+    # Deploy on any branch push (secrets will be checked in the step)
+    if: github.event_name == 'push'
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Determine deployment configuration
+        id: config
+        env:
+          BRANCH_NAME: ${{ github.ref_name }}
+          EC2_HOST_BRANCH: ${{ secrets[format('EC2_HOST_{0}', github.ref_name)] }}
+          EC2_SSH_KEY_BRANCH: ${{ secrets[format('EC2_SSH_PRIVATE_KEY_{0}', github.ref_name)] }}
+        run: |
+          # Main branch uses repo owner's default secrets
+          # Other branches use branch-specific secrets configured by the branch owner
+          if [ "$BRANCH_NAME" = "main" ]; then
+            EC2_HOST="${{ secrets.EC2_HOST }}"
+            SSH_KEY="${{ secrets.EC2_SSH_PRIVATE_KEY }}"
+            echo "Using production credentials for main branch (repo owner's secrets)"
+          else
+            # For other branches, use branch-specific secrets
+            if [ -n "$EC2_HOST_BRANCH" ] && [ -n "$EC2_SSH_KEY_BRANCH" ]; then
+              EC2_HOST="$EC2_HOST_BRANCH"
+              SSH_KEY="$EC2_SSH_KEY_BRANCH"
+              echo "Using branch-specific configuration for: $BRANCH_NAME"
+            else
+              echo "Error: Branch-specific secrets not found for branch: $BRANCH_NAME"
+              echo "Please configure the following secrets for your branch:"
+              echo "  - EC2_HOST_${BRANCH_NAME}"
+              echo "  - EC2_SSH_PRIVATE_KEY_${BRANCH_NAME}"
+              echo ""
+              echo "Note: Main branch uses default EC2_HOST and EC2_SSH_PRIVATE_KEY secrets."
+              exit 1
+            fi
+          fi
+
+          if [ -z "$EC2_HOST" ]; then
+            echo "Error: No EC2_HOST configured for branch $BRANCH_NAME"
+            exit 1
+          fi
+
+          if [ -z "$SSH_KEY" ]; then
+            echo "Error: No EC2_SSH_PRIVATE_KEY configured for branch $BRANCH_NAME"
+            exit 1
+          fi
+
+          echo "ec2_host=$EC2_HOST" >> $GITHUB_OUTPUT
+          echo "ssh_key<<EOF" >> $GITHUB_OUTPUT
+          echo "$SSH_KEY" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
+
       - name: Setup SSH
         uses: webfactory/ssh-agent@v0.9.0
         with:
-          ssh-private-key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+          ssh-private-key: ${{ steps.config.outputs.ssh_key }}
 
       - name: Deploy Backend to EC2
         run: |
+          EC2_HOST="${{ steps.config.outputs.ec2_host }}"
+          BRANCH_NAME="${{ steps.config.outputs.branch_name }}"
+
           # Create directories and set permissions first
-          ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
+          ssh -o StrictHostKeyChecking=no ubuntu@$EC2_HOST << 'EOF'
             sudo mkdir -p /var/www/html/api
             sudo chown -R ubuntu:ubuntu /var/www/html/api
           EOF
 
           # Copy backend files to EC2
           rsync -avz --delete -e "ssh -o StrictHostKeyChecking=no" \
-            backend/ ubuntu@${{ secrets.EC2_HOST }}:/var/www/html/api/
+            backend/ ubuntu@$EC2_HOST:/var/www/html/api/
 
           # Use make deploy-ec2 for backend setup
-          ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
+          ssh -o StrictHostKeyChecking=no ubuntu@$EC2_HOST << 'EOF'
             cd /var/www/html/api
             
             # Set proper ownership for configuration
@@ -310,17 +360,17 @@ jobs:
           make build-frontend-prod
 
           # Create app directory and set permissions
-          ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
+          ssh -o StrictHostKeyChecking=no ubuntu@$EC2_HOST << 'EOF'
             sudo mkdir -p /var/www/html/app
             sudo chown -R ubuntu:ubuntu /var/www/html/app
           EOF
 
           # Copy built files to EC2
           rsync -avz --delete -e "ssh -o StrictHostKeyChecking=no" \
-            web-app/dist/byu-590r-builder/ ubuntu@${{ secrets.EC2_HOST }}:/var/www/html/app/
+            web-app/dist/byu-590r-builder/ ubuntu@$EC2_HOST:/var/www/html/app/
 
           # Set proper permissions and restart Apache
-          ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
+          ssh -o StrictHostKeyChecking=no ubuntu@$EC2_HOST << 'EOF'
             sudo chown -R www-data:www-data /var/www/html/app
             sudo chmod -R 755 /var/www/html/app
             sudo systemctl reload apache2
@@ -328,11 +378,13 @@ jobs:
 
       - name: Verify Deployment
         run: |
+          EC2_HOST="${{ steps.config.outputs.ec2_host }}"
+
           # Wait a moment for services to start
           sleep 10
 
           # Check if services are running
-          ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
+          ssh -o StrictHostKeyChecking=no ubuntu@$EC2_HOST << 'EOF'
             echo "=== Apache Status ==="
             sudo systemctl status apache2 --no-pager
             echo "=== MySQL Status ==="
@@ -347,51 +399,143 @@ jobs:
     name: Run Database Migrations
     needs: [deploy-to-ec2]
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+    # Run migrations on any branch push (secrets will be checked in the step)
+    if: github.event_name == 'push'
 
     steps:
+      - name: Determine deployment configuration
+        id: config
+        env:
+          BRANCH_NAME: ${{ github.ref_name }}
+          EC2_HOST_BRANCH: ${{ secrets[format('EC2_HOST_{0}', github.ref_name)] }}
+          EC2_SSH_KEY_BRANCH: ${{ secrets[format('EC2_SSH_PRIVATE_KEY_{0}', github.ref_name)] }}
+        run: |
+          # Main branch uses repo owner's default secrets
+          # Other branches use branch-specific secrets configured by the branch owner
+          if [ "$BRANCH_NAME" = "main" ]; then
+            EC2_HOST="${{ secrets.EC2_HOST }}"
+            SSH_KEY="${{ secrets.EC2_SSH_PRIVATE_KEY }}"
+            echo "Using production credentials for main branch (repo owner's secrets)"
+          else
+            # For other branches, use branch-specific secrets
+            if [ -n "$EC2_HOST_BRANCH" ] && [ -n "$EC2_SSH_KEY_BRANCH" ]; then
+              EC2_HOST="$EC2_HOST_BRANCH"
+              SSH_KEY="$EC2_SSH_KEY_BRANCH"
+              echo "Using branch-specific configuration for: $BRANCH_NAME"
+            else
+              echo "Error: Branch-specific secrets not found for branch: $BRANCH_NAME"
+              echo "Please configure the following secrets for your branch:"
+              echo "  - EC2_HOST_${BRANCH_NAME}"
+              echo "  - EC2_SSH_PRIVATE_KEY_${BRANCH_NAME}"
+              exit 1
+            fi
+          fi
+
+          if [ -z "$EC2_HOST" ]; then
+            echo "Error: No EC2_HOST configured for branch $BRANCH_NAME"
+            exit 1
+          fi
+
+          if [ -z "$SSH_KEY" ]; then
+            echo "Error: No EC2_SSH_PRIVATE_KEY configured for branch $BRANCH_NAME"
+            exit 1
+          fi
+
+          echo "ec2_host=$EC2_HOST" >> $GITHUB_OUTPUT
+          echo "ssh_key<<EOF" >> $GITHUB_OUTPUT
+          echo "$SSH_KEY" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
       - name: Setup SSH
         uses: webfactory/ssh-agent@v0.9.0
         with:
-          ssh-private-key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+          ssh-private-key: ${{ steps.config.outputs.ssh_key }}
 
       - name: Run Migrations
         run: |
-          ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
+          EC2_HOST="${{ steps.config.outputs.ec2_host }}"
+
+          ssh -o StrictHostKeyChecking=no ubuntu@$EC2_HOST << 'EOF'
             cd /var/www/html/api
             
+            # Ensure .env is properly configured for MySQL
+            if ! grep -q "^DB_CONNECTION=mysql" .env 2>/dev/null; then
+              echo "Setting DB_CONNECTION=mysql in .env"
+              sed -i 's/^DB_CONNECTION=.*/DB_CONNECTION=mysql/' .env || echo "DB_CONNECTION=mysql" >> .env
+            fi
+            
+            if ! grep -q "^DB_HOST=localhost" .env 2>/dev/null; then
+              echo "Setting DB_HOST=localhost in .env"
+              sed -i 's/^DB_HOST=.*/DB_HOST=localhost/' .env || echo "DB_HOST=localhost" >> .env
+            fi
+            
+            # Clear config cache to ensure .env changes are loaded
+            php artisan config:clear
+            
+            # Test database connection first
+            echo "Testing database connection..."
+            if ! php artisan db:show 2>/dev/null; then
+              echo "Warning: Could not connect to database. Checking configuration..."
+              echo "DB_CONNECTION: $(grep '^DB_CONNECTION=' .env | cut -d'=' -f2 || echo 'not set')"
+              echo "DB_HOST: $(grep '^DB_HOST=' .env | cut -d'=' -f2 || echo 'not set')"
+              echo "DB_DATABASE: $(grep '^DB_DATABASE=' .env | cut -d'=' -f2 || echo 'not set')"
+            fi
+            
             # Check if this is the first migration run
-            # If migrate:status fails or returns no ran migrations, it's the first run
+            # Try to check if migrations table exists
             set +e
-            MIGRATE_STATUS_OUTPUT=$(php artisan migrate:status 2>&1)
-            MIGRATE_STATUS_EXIT=$?
+            TABLE_EXISTS=$(php artisan tinker --execute="echo Schema::hasTable('migrations') ? '1' : '0';" 2>/dev/null | tail -1 | tr -d '[:space:]' || echo "0")
             set -e
             
             IS_FIRST_RUN=false
             
-            if [ $MIGRATE_STATUS_EXIT -ne 0 ]; then
-              # Command failed - likely first run (migrations table doesn't exist)
+            # If table doesn't exist or we can't check, assume first run
+            if [ "$TABLE_EXISTS" != "1" ]; then
               IS_FIRST_RUN=true
               echo "First migration run detected (migrations table doesn't exist). Will seed database."
             else
-              # Count how many migrations have been run
-              RAN_MIGRATIONS=$(echo "$MIGRATE_STATUS_OUTPUT" | grep -c "Ran" || echo "0")
+              # Table exists, check if any migrations have been run
+              set +e
+              MIGRATE_STATUS_OUTPUT=$(php artisan migrate:status 2>&1)
+              MIGRATE_STATUS_EXIT=$?
+              set -e
               
-              if [ "$RAN_MIGRATIONS" -eq 0 ]; then
-                IS_FIRST_RUN=true
-                echo "First migration run detected (no migrations have been run). Will seed database."
+              if [ $MIGRATE_STATUS_EXIT -eq 0 ]; then
+                # Count migrations that have been run (look for "Ran" in status output)
+                RAN_COUNT=$(echo "$MIGRATE_STATUS_OUTPUT" | grep -o "Ran" | wc -l | tr -d '[:space:]')
+                
+                # Validate the count is a number
+                if ! echo "$RAN_COUNT" | grep -qE '^[0-9]+$'; then
+                  RAN_COUNT=0
+                fi
+                
+                if [ "$RAN_COUNT" -eq 0 ]; then
+                  IS_FIRST_RUN=true
+                  echo "First migration run detected (no migrations have been run). Will seed database."
+                fi
               fi
             fi
             
             # Check if there are pending migrations
-            PENDING_MIGRATIONS=$(php artisan migrate:status --pending 2>/dev/null | grep -c "Pending" || echo "0")
+            set +e
+            PENDING_OUTPUT=$(php artisan migrate:status --pending 2>/dev/null)
+            PENDING_EXIT=$?
+            set -e
             
-            if [ "$PENDING_MIGRATIONS" -gt 0 ] || [ "$IS_FIRST_RUN" = "true" ]; then
+            PENDING_COUNT=0
+            if [ $PENDING_EXIT -eq 0 ] && [ -n "$PENDING_OUTPUT" ]; then
+              PENDING_COUNT=$(echo "$PENDING_OUTPUT" | grep -o "Pending" | wc -l | tr -d '[:space:]')
+              if ! echo "$PENDING_COUNT" | grep -qE '^[0-9]+$'; then
+                PENDING_COUNT=0
+              fi
+            fi
+            
+            if [ "$PENDING_COUNT" -gt 0 ] || [ "$IS_FIRST_RUN" = "true" ]; then
               if [ "$IS_FIRST_RUN" = "true" ]; then
                 echo "Running first-time migrations with seeding..."
                 php artisan migrate --force --seed
               else
-                echo "Found $PENDING_MIGRATIONS pending migration(s). Running migrations (no seeding)..."
+                echo "Found $PENDING_COUNT pending migration(s). Running migrations (no seeding)..."
                 php artisan migrate --force
               fi
               
@@ -405,27 +549,58 @@ jobs:
     name: Deploy Complete
     needs: [run-migrations]
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+    # Complete deployment on any branch push
+    if: github.event_name == 'push'
 
     steps:
+      - name: Determine deployment configuration
+        id: config
+        env:
+          BRANCH_NAME: ${{ github.ref_name }}
+          EC2_HOST_BRANCH: ${{ secrets[format('EC2_HOST_{0}', github.ref_name)] }}
+        run: |
+          # Main branch uses repo owner's default secrets
+          # Other branches use branch-specific secrets configured by the branch owner
+          if [ "$BRANCH_NAME" = "main" ]; then
+            EC2_HOST="${{ secrets.EC2_HOST }}"
+            echo "Using production credentials for main branch (repo owner's secrets)"
+          else
+            # For other branches, use branch-specific secrets
+            if [ -n "$EC2_HOST_BRANCH" ]; then
+              EC2_HOST="$EC2_HOST_BRANCH"
+              echo "Using branch-specific configuration for: $BRANCH_NAME"
+            else
+              echo "Error: Branch-specific secret not found for branch: $BRANCH_NAME"
+              echo "Please configure EC2_HOST_${BRANCH_NAME} secret for your branch."
+              exit 1
+            fi
+          fi
+
+          echo "ec2_host=$EC2_HOST" >> $GITHUB_OUTPUT
+          echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
+
       - name: Comment deployment success
         uses: actions/github-script@v7
         with:
           script: |
-            // Only comment on pull requests, not on direct pushes to main
+            const ec2Host = '${{ steps.config.outputs.ec2_host }}';
+            const branchName = '${{ steps.config.outputs.branch_name }}';
+
+            // Only comment on pull requests, not on direct pushes
             if (context.payload.pull_request) {
               github.rest.issues.createComment({
                 issue_number: context.issue.number,
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                body: `🚀 **EC2 Deployment Successful!**\n\n✅ **Frontend**: Deployed to EC2 (Apache)\n🔗 **Frontend URL**: http://${{ secrets.EC2_HOST }}\n\n✅ **Backend**: Deployed to EC2 (Apache)\n🔗 **Backend API**: http://${{ secrets.EC2_HOST }}:4444/api/hello\n\n🎉 Your BYU 590R Monorepo is now running on EC2 with Apache!`
+                body: `🚀 **EC2 Deployment Successful!**\n\n**Branch**: ${branchName}\n\n✅ **Frontend**: Deployed to EC2 (Apache)\n🔗 **Frontend URL**: http://${ec2Host}\n\n✅ **Backend**: Deployed to EC2 (Apache)\n🔗 **Backend API**: http://${ec2Host}:4444/api/hello\n\n🎉 Your BYU 590R Monorepo is now running on EC2 with Apache!`
               });
             } else {
-              // For direct pushes to main, create a deployment status
+              // For direct pushes, create a deployment status
               console.log('🚀 EC2 Deployment Successful!');
+              console.log(`**Branch**: ${branchName}`);
               console.log('✅ Frontend: Deployed to EC2 (Apache)');
-              console.log(`🔗 Frontend URL: http://${{ secrets.EC2_HOST }}`);
+              console.log(`🔗 Frontend URL: http://${ec2Host}`);
               console.log('✅ Backend: Deployed to EC2 (Apache)');
-              console.log(`🔗 Backend API: http://${{ secrets.EC2_HOST }}:4444/api/hello`);
+              console.log(`🔗 Backend API: http://${ec2Host}:4444/api/hello`);
               console.log('🎉 Your BYU 590R Monorepo is now running on EC2 with Apache!');
             }
