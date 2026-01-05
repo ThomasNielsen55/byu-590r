@@ -1,0 +1,133 @@
+name: Run Migrations
+
+on:
+  workflow_call:
+    inputs:
+      ec2_host:
+        required: true
+        type: string
+      ssh_key:
+        required: true
+        type: string
+
+jobs:
+  run-migrations:
+    name: Run Database Migrations
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ inputs.ssh_key }}
+
+      - name: Run Migrations
+        run: |
+          EC2_HOST="${{ inputs.ec2_host }}"
+
+          ssh -o StrictHostKeyChecking=no ubuntu@$EC2_HOST << 'EOF'
+            cd /var/www/html/api
+            
+            # Ensure .env file exists
+            if [ ! -f .env ]; then
+              echo "Error: .env file does not exist!"
+              exit 1
+            fi
+            
+            # Ensure .env is properly configured for MySQL
+            # Remove any existing DB_CONNECTION line and add the correct one
+            sed -i '/^DB_CONNECTION=/d' .env
+            echo "DB_CONNECTION=mysql" >> .env
+            
+            # Ensure DB_HOST is set to localhost
+            if ! grep -q "^DB_HOST=" .env; then
+              echo "DB_HOST=localhost" >> .env
+            else
+              sed -i 's/^DB_HOST=.*/DB_HOST=localhost/' .env
+            fi
+            
+            # Verify the settings
+            echo "Verifying database configuration..."
+            echo "DB_CONNECTION: $(grep '^DB_CONNECTION=' .env | cut -d'=' -f2 || echo 'NOT SET')"
+            echo "DB_HOST: $(grep '^DB_HOST=' .env | cut -d'=' -f2 || echo 'NOT SET')"
+            echo "DB_DATABASE: $(grep '^DB_DATABASE=' .env | cut -d'=' -f2 || echo 'NOT SET')"
+            
+            # Clear all caches to ensure .env changes are loaded
+            php artisan config:clear
+            php artisan cache:clear
+            php artisan route:clear
+            php artisan view:clear
+            
+            # Test database connection first
+            echo "Testing database connection..."
+            if ! php artisan db:show 2>/dev/null; then
+              echo "Warning: Could not connect to database. Checking configuration..."
+              echo "DB_CONNECTION: $(grep '^DB_CONNECTION=' .env | cut -d'=' -f2 || echo 'not set')"
+              echo "DB_HOST: $(grep '^DB_HOST=' .env | cut -d'=' -f2 || echo 'not set')"
+              echo "DB_DATABASE: $(grep '^DB_DATABASE=' .env | cut -d'=' -f2 || echo 'not set')"
+            fi
+            
+            # Check if this is the first migration run
+            # Try to check if migrations table exists
+            set +e
+            TABLE_EXISTS=$(php artisan tinker --execute="echo Schema::hasTable('migrations') ? '1' : '0';" 2>/dev/null | tail -1 | tr -d '[:space:]' || echo "0")
+            set -e
+            
+            IS_FIRST_RUN=false
+            
+            # If table doesn't exist or we can't check, assume first run
+            if [ "$TABLE_EXISTS" != "1" ]; then
+              IS_FIRST_RUN=true
+              echo "First migration run detected (migrations table doesn't exist). Will seed database."
+            else
+              # Table exists, check if any migrations have been run
+              set +e
+              MIGRATE_STATUS_OUTPUT=$(php artisan migrate:status 2>&1)
+              MIGRATE_STATUS_EXIT=$?
+              set -e
+              
+              if [ $MIGRATE_STATUS_EXIT -eq 0 ]; then
+                # Count migrations that have been run (look for "Ran" in status output)
+                RAN_COUNT=$(echo "$MIGRATE_STATUS_OUTPUT" | grep -o "Ran" | wc -l | tr -d '[:space:]')
+                
+                # Validate the count is a number
+                if ! echo "$RAN_COUNT" | grep -qE '^[0-9]+$'; then
+                  RAN_COUNT=0
+                fi
+                
+                if [ "$RAN_COUNT" -eq 0 ]; then
+                  IS_FIRST_RUN=true
+                  echo "First migration run detected (no migrations have been run). Will seed database."
+                fi
+              fi
+            fi
+            
+            # Check if there are pending migrations
+            set +e
+            PENDING_OUTPUT=$(php artisan migrate:status --pending 2>/dev/null)
+            PENDING_EXIT=$?
+            set -e
+            
+            PENDING_COUNT=0
+            if [ $PENDING_EXIT -eq 0 ] && [ -n "$PENDING_OUTPUT" ]; then
+              PENDING_COUNT=$(echo "$PENDING_OUTPUT" | grep -o "Pending" | wc -l | tr -d '[:space:]')
+              if ! echo "$PENDING_COUNT" | grep -qE '^[0-9]+$'; then
+                PENDING_COUNT=0
+              fi
+            fi
+            
+            if [ "$PENDING_COUNT" -gt 0 ] || [ "$IS_FIRST_RUN" = "true" ]; then
+              if [ "$IS_FIRST_RUN" = "true" ]; then
+                echo "Running first-time migrations with seeding..."
+                php artisan migrate --force --seed
+              else
+                echo "Found $PENDING_COUNT pending migration(s). Running migrations (no seeding)..."
+                php artisan migrate --force
+              fi
+              
+              echo "Migrations completed successfully"
+            else
+              echo "No pending migrations. Database is up to date."
+            fi
+          EOF
+

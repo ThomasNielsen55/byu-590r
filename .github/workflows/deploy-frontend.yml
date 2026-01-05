@@ -1,0 +1,61 @@
+name: Deploy Frontend
+
+on:
+  workflow_call:
+    inputs:
+      ec2_host:
+        required: true
+        type: string
+
+jobs:
+  deploy-frontend:
+    name: Deploy Frontend to EC2
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy Frontend to EC2
+        run: |
+          EC2_HOST="${{ inputs.ec2_host }}"
+
+          # Build Angular app locally using make
+          make build-frontend-prod
+
+          # Create app directory and set permissions
+          ssh -o StrictHostKeyChecking=no ubuntu@$EC2_HOST << 'EOF'
+            sudo mkdir -p /var/www/html/app
+            sudo chown -R ubuntu:ubuntu /var/www/html/app
+          EOF
+
+          # Copy built files to EC2
+          rsync -avz --delete -e "ssh -o StrictHostKeyChecking=no" \
+            web-app/dist/byu-590r-builder/ ubuntu@$EC2_HOST:/var/www/html/app/
+
+          # Set proper permissions and restart Apache
+          ssh -o StrictHostKeyChecking=no ubuntu@$EC2_HOST << 'EOF'
+            sudo chown -R www-data:www-data /var/www/html/app
+            sudo chmod -R 755 /var/www/html/app
+            sudo systemctl reload apache2
+          EOF
+
+      - name: Verify Deployment
+        run: |
+          EC2_HOST="${{ inputs.ec2_host }}"
+
+          # Wait a moment for services to start
+          sleep 10
+
+          # Check if services are running
+          ssh -o StrictHostKeyChecking=no ubuntu@$EC2_HOST << 'EOF'
+            echo "=== Apache Status ==="
+            sudo systemctl status apache2 --no-pager
+            echo "=== MySQL Status ==="
+            sudo systemctl status mysql --no-pager
+            echo "=== Laravel API Test ==="
+            curl -f http://localhost:4444/api/hello || echo "API endpoint not responding"
+            echo "=== Frontend Test ==="
+            curl -f http://localhost/ || echo "Frontend not responding"
+          EOF
+
