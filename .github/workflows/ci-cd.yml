@@ -309,6 +309,17 @@ jobs:
             
             # Set APP_ENV to production for deployment
             sed -i "s/APP_ENV=.*/APP_ENV=production/" .env
+            
+            # Verify database configuration is set correctly
+            echo "=== Verifying database configuration ==="
+            grep "DB_CONNECTION" .env || echo "ERROR: DB_CONNECTION not found in .env"
+            grep "DB_HOST" .env || echo "ERROR: DB_HOST not found in .env"
+            grep "DB_DATABASE" .env || echo "ERROR: DB_DATABASE not found in .env"
+            
+            # Clear any cached config BEFORE composer install to ensure fresh config
+            rm -f bootstrap/cache/config.php
+            php artisan config:clear 2>/dev/null || true
+            
             # Try install first, fall back to update if lock file is incompatible
             set +e
             OUTPUT=$(composer install -q --no-ansi --no-interaction --no-scripts --no-progress --prefer-dist --no-dev --optimize-autoloader 2>&1)
@@ -330,9 +341,20 @@ jobs:
               php artisan key:generate
             fi
             
-            # Clear config cache to ensure new key is loaded
+            # Clear ALL caches to ensure database config is loaded fresh
             rm -f bootstrap/cache/config.php
             php artisan config:clear
+            php artisan cache:clear
+            
+            # Double-check database connection is set to mysql
+            if ! grep -q "DB_CONNECTION=mysql" .env; then
+              echo "WARNING: DB_CONNECTION not set to mysql, fixing..."
+              sed -i 's/DB_CONNECTION=.*/DB_CONNECTION=mysql/' .env || echo "DB_CONNECTION=mysql" >> .env
+            fi
+            
+            # Verify database configuration again after all changes
+            echo "=== Final database configuration check ==="
+            cat .env | grep -E "^DB_" | head -10
             
             # Create storage directories if they don't exist
             sudo mkdir -p /var/www/html/api/storage/framework/cache
@@ -359,7 +381,9 @@ jobs:
             sudo chmod -R 775 /var/www/html/api/storage/app
             
             # Run database migrations fresh with seeding
-            php artisan migrate:fresh --seed --force
+            # Explicitly use mysql connection and verify connection works
+            php artisan config:clear
+            php artisan migrate:fresh --seed --force --database=mysql
             
             # Configure Laravel for production (skip config cache to avoid APP_KEY issues)
             php artisan route:cache
