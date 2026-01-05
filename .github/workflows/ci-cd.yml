@@ -31,7 +31,7 @@ jobs:
           SHOULD_DEPLOY="false"
           EC2_HOST=""
           SSH_KEY=""
-          
+
           if [ "$BRANCH_NAME" = "main" ]; then
             EC2_HOST="${{ secrets.EC2_HOST }}"
             SSH_KEY="${{ secrets.EC2_SSH_PRIVATE_KEY }}"
@@ -67,7 +67,7 @@ jobs:
           echo "EOF" >> $GITHUB_OUTPUT
           echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
           echo "should_deploy=$SHOULD_DEPLOY" >> $GITHUB_OUTPUT
-          
+
           echo ""
           echo "=== Deployment Configuration Summary ==="
           echo "Branch: $BRANCH_NAME"
