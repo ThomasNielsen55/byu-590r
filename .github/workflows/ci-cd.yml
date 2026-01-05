@@ -245,20 +245,32 @@ jobs:
               chmod 644 .env
             fi
             
+            # Set database connection to MySQL
+            sed -i 's/DB_CONNECTION=.*/DB_CONNECTION=mysql/' .env || echo "DB_CONNECTION=mysql" >> .env
+            
             # Fix DB_HOST for server deployment (change from mysql to localhost)
-            sed -i "s/DB_HOST=mysql/DB_HOST=localhost/" .env
+            sed -i "s/DB_HOST=mysql/DB_HOST=localhost/" .env || sed -i 's/DB_HOST=.*/DB_HOST=localhost/' .env || echo "DB_HOST=localhost" >> .env
+            
+            # Set DB_PORT to 3306 for MySQL
+            sed -i 's/DB_PORT=.*/DB_PORT=3306/' .env || echo "DB_PORT=3306" >> .env
             
             # Update .env with GitHub secrets if provided
             if [ -n "${{ secrets.DB_PASSWORD }}" ]; then
               sed -i "s/DB_PASSWORD=.*/DB_PASSWORD=${{ secrets.DB_PASSWORD }}/" .env
+            else
+              sed -i "s/DB_PASSWORD=.*/DB_PASSWORD=byu_password/" .env || echo "DB_PASSWORD=byu_password" >> .env
             fi
             
             if [ -n "${{ secrets.DB_USERNAME }}" ]; then
               sed -i "s/DB_USERNAME=.*/DB_USERNAME=${{ secrets.DB_USERNAME }}/" .env
+            else
+              sed -i "s/DB_USERNAME=.*/DB_USERNAME=byu_user/" .env || echo "DB_USERNAME=byu_user" >> .env
             fi
             
             if [ -n "${{ secrets.DB_DATABASE }}" ]; then
               sed -i "s/DB_DATABASE=.*/DB_DATABASE=${{ secrets.DB_DATABASE }}/" .env
+            else
+              sed -i "s/DB_DATABASE=.*/DB_DATABASE=byu_590r_app/" .env || echo "DB_DATABASE=byu_590r_app" >> .env
             fi
             
             # Update APP_DEBUG from GitHub secrets if provided
