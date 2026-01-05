@@ -23,19 +23,19 @@ NC='\033[0m' # No Color
 
 # Functions
 log_info() {
-    echo -e "${BLUE}[INFO]${NC} $1"
+    echo -e "${BLUE}[INFO]${NC} $1" >&2
 }
 
 log_success() {
-    echo -e "${GREEN}[SUCCESS]${NC} $1"
+    echo -e "${GREEN}[SUCCESS]${NC} $1" >&2
 }
 
 log_warning() {
-    echo -e "${YELLOW}[WARNING]${NC} $1"
+    echo -e "${YELLOW}[WARNING]${NC} $1" >&2
 }
 
 log_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
+    echo -e "${RED}[ERROR]${NC} $1" >&2
 }
 
 # Configuration (can be overridden by .env file)
@@ -329,25 +329,51 @@ create_single_s3_bucket() {
         
         # Create bucket with region-specific configuration
         if [ "$AWS_REGION" = "us-east-1" ]; then
-            aws s3api create-bucket --bucket "$BUCKET_NAME"
+            aws s3api create-bucket --bucket "$BUCKET_NAME" >/dev/null 2>&1
         else
-            aws s3api create-bucket --bucket "$BUCKET_NAME" --region "$AWS_REGION" --create-bucket-configuration LocationConstraint="$AWS_REGION"
+            aws s3api create-bucket --bucket "$BUCKET_NAME" --region "$AWS_REGION" --create-bucket-configuration LocationConstraint="$AWS_REGION" >/dev/null 2>&1
         fi
         
         # Configure bucket for public access (if needed)
         aws s3api put-public-access-block \
             --bucket "$BUCKET_NAME" \
-            --public-access-block-configuration "BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true"
+            --public-access-block-configuration "BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true" >/dev/null 2>&1
         
         # Tag the bucket for proper identification
+        # Use proper JSON format for tagging
         aws s3api put-bucket-tagging \
             --bucket "$BUCKET_NAME" \
-            --tagging "TagSet=[{Key=Name,Value=byu-590r-${BUCKET_TYPE}},{Key=Project,Value=byu-590r},{Key=Environment,Value=${ENV_TAG}}]"
+            --tagging "{\"TagSet\":[{\"Key\":\"Name\",\"Value\":\"byu-590r-${BUCKET_TYPE}\"},{\"Key\":\"Project\",\"Value\":\"byu-590r\"},{\"Key\":\"Environment\",\"Value\":\"${ENV_TAG}\"}]}" >/dev/null 2>&1
         
         log_success "S3 bucket '$BUCKET_NAME' created successfully with tags (Type: ${BUCKET_TYPE})"
     fi
     
-    echo "$BUCKET_NAME"
+    # Output bucket name to stdout (for command substitution)
+    # Use printf to ensure clean output without any extra characters
+    printf "%s\n" "$BUCKET_NAME"
+}
+
+# Wait for S3 bucket to be ready
+wait_for_s3_bucket() {
+    local BUCKET_NAME=$1
+    local MAX_ATTEMPTS=10
+    local ATTEMPT=1
+    
+    while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
+        if aws s3api head-bucket --bucket "$BUCKET_NAME" 2>/dev/null; then
+            # Try to list the bucket to ensure it's fully ready
+            if aws s3 ls "s3://$BUCKET_NAME" >/dev/null 2>&1; then
+                log_info "Bucket $BUCKET_NAME is ready"
+                return 0
+            fi
+        fi
+        log_info "Waiting for bucket $BUCKET_NAME to be ready (attempt $ATTEMPT/$MAX_ATTEMPTS)..."
+        sleep 2
+        ((ATTEMPT++))
+    done
+    
+    log_warning "Bucket $BUCKET_NAME may not be fully ready yet"
+    return 1
 }
 
 # Create S3 buckets (both dev and prod)
@@ -356,11 +382,27 @@ create_s3_bucket() {
     
     # Create dev bucket
     DEV_BUCKET_NAME="${PROJECT_NAME}-dev-$(date +%s)"
+    # Capture only stdout (bucket name), logs go to stderr
     DEV_BUCKET=$(create_single_s3_bucket "dev" "$DEV_BUCKET_NAME" "development")
+    # Clean any whitespace/newlines from the bucket name
+    DEV_BUCKET=$(echo -n "$DEV_BUCKET" | tr -d '\n\r' | xargs)
     
     # Create prod bucket
     PROD_BUCKET_NAME="${PROJECT_NAME}-prod-$(date +%s)-$(openssl rand -hex 4)"
+    # Capture only stdout (bucket name), logs go to stderr
     PROD_BUCKET=$(create_single_s3_bucket "prod" "$PROD_BUCKET_NAME" "production")
+    # Clean any whitespace/newlines from the bucket name
+    PROD_BUCKET=$(echo -n "$PROD_BUCKET" | tr -d '\n\r' | xargs)
+    
+    # Verify bucket names were captured correctly
+    if [[ -z "$DEV_BUCKET" ]] || [[ "$DEV_BUCKET" =~ ^[[:space:]]*$ ]]; then
+        log_error "Failed to capture DEV bucket name"
+        DEV_BUCKET="$DEV_BUCKET_NAME"
+    fi
+    if [[ -z "$PROD_BUCKET" ]] || [[ "$PROD_BUCKET" =~ ^[[:space:]]*$ ]]; then
+        log_error "Failed to capture PROD bucket name"
+        PROD_BUCKET="$PROD_BUCKET_NAME"
+    fi
     
     # Save bucket names to config file
     echo "S3_BUCKET_DEV=$DEV_BUCKET" >> ../.server-config
@@ -371,11 +413,16 @@ create_s3_bucket() {
     log_info "  Dev Bucket: $DEV_BUCKET"
     log_info "  Prod Bucket: $PROD_BUCKET"
     
+    # Wait for buckets to be fully ready (S3 buckets can take a moment to propagate)
+    log_info "Waiting for S3 buckets to be ready..."
+    wait_for_s3_bucket "$DEV_BUCKET" || log_warning "Dev bucket may not be ready yet"
+    wait_for_s3_bucket "$PROD_BUCKET" || log_warning "Prod bucket may not be ready yet"
+    
     # Upload book images to both buckets
     log_info "Uploading book images to dev bucket..."
-    upload_book_images_to_s3 "$DEV_BUCKET"
+    upload_book_images_to_s3 "$DEV_BUCKET" || log_warning "Failed to upload images to dev bucket, continuing..."
     log_info "Uploading book images to prod bucket..."
-    upload_book_images_to_s3 "$PROD_BUCKET"
+    upload_book_images_to_s3 "$PROD_BUCKET" || log_warning "Failed to upload images to prod bucket, continuing..."
 }
 
 # Upload book images to S3
@@ -384,7 +431,7 @@ upload_book_images_to_s3() {
     
     if [ -z "$BUCKET_NAME" ]; then
         log_warning "S3 bucket name not provided, skipping book image upload"
-        return
+        return 0
     fi
     
     log_info "Uploading book images to S3 bucket: $BUCKET_NAME"
@@ -399,7 +446,7 @@ upload_book_images_to_s3() {
     if [ ! -d "$BOOKS_DIR" ]; then
         log_warning "Book images directory not found: $BOOKS_DIR"
         log_info "Skipping book image upload - directory will be created during deployment"
-        return
+        return 0
     fi
     
     # List files in directory for debugging
@@ -421,6 +468,12 @@ upload_book_images_to_s3() {
         "bom.jpg"
     )
     
+    # Verify bucket is accessible before attempting uploads
+    if ! aws s3api head-bucket --bucket "$BUCKET_NAME" 2>/dev/null; then
+        log_error "Bucket $BUCKET_NAME does not exist or is not accessible"
+        return 1
+    fi
+    
     UPLOADED_COUNT=0
     for local_file in "${FILES_TO_UPLOAD[@]}"; do
         s3_key="images/$local_file"
@@ -430,16 +483,30 @@ upload_book_images_to_s3() {
             log_info "Uploading $local_file to s3://$BUCKET_NAME/$s3_key"
             # Upload without ACL since bucket has public access blocked
             # The bucket policy can be configured separately if public access is needed
-            UPLOAD_OUTPUT=$(aws s3 cp "$local_path" "s3://$BUCKET_NAME/$s3_key" 2>&1)
-            UPLOAD_EXIT_CODE=$?
+            # Retry up to 3 times if upload fails (bucket might still be propagating)
+            MAX_RETRIES=3
+            RETRY=0
+            UPLOAD_SUCCESS=false
             
-            if [ $UPLOAD_EXIT_CODE -eq 0 ]; then
-                ((UPLOADED_COUNT++))
-                log_success "Uploaded $local_file successfully"
-            else
-                log_error "Failed to upload $local_file"
-                log_error "Error: $UPLOAD_OUTPUT"
-            fi
+            while [ $RETRY -lt $MAX_RETRIES ] && [ "$UPLOAD_SUCCESS" = false ]; do
+                UPLOAD_OUTPUT=$(aws s3 cp "$local_path" "s3://$BUCKET_NAME/$s3_key" 2>&1)
+                UPLOAD_EXIT_CODE=$?
+                
+                if [ $UPLOAD_EXIT_CODE -eq 0 ]; then
+                    ((UPLOADED_COUNT++))
+                    log_success "Uploaded $local_file successfully"
+                    UPLOAD_SUCCESS=true
+                else
+                    ((RETRY++))
+                    if [ $RETRY -lt $MAX_RETRIES ]; then
+                        log_warning "Upload attempt $RETRY failed, retrying in 2 seconds..."
+                        sleep 2
+                    else
+                        log_error "Failed to upload $local_file after $MAX_RETRIES attempts (exit code: $UPLOAD_EXIT_CODE)"
+                        log_error "Error output: $UPLOAD_OUTPUT"
+                    fi
+                fi
+            done
         else
             log_warning "File not found: $local_path"
         fi
@@ -450,6 +517,9 @@ upload_book_images_to_s3() {
     else
         log_warning "No book images were uploaded"
     fi
+    
+    # Always return success to prevent script from exiting
+    return 0
 }
 
 # Setup EC2 instance with dependencies only
@@ -688,35 +758,55 @@ main() {
     echo "     Secret Name: EC2_HOST"
     echo "     Secret Value: $EC2_HOST"
     echo ""
-    echo "  3. Update the S3 bucket secrets with the generated bucket names:"
+    echo "  3. Update the S3 bucket secret in GitHub Actions (PRODUCTION ONLY):"
     echo ""
     if [ -f "../.server-config" ]; then
-        source ../.server-config
-        if [ -n "$S3_BUCKET_DEV" ]; then
-            echo "     Secret Name: S3_BUCKET_DEV"
-            echo "     Secret Value: $S3_BUCKET_DEV"
-            echo ""
-        fi
+        # Safely load configuration, filtering out any log output or color codes
+        while IFS= read -r line || [ -n "$line" ]; do
+            # Skip empty lines, comments, and lines that don't look like variable assignments
+            if [[ -n "$line" ]] && [[ ! "$line" =~ ^[[:space:]]*# ]] && [[ "$line" =~ ^[A-Z_][A-Z0-9_]*= ]]; then
+                # Remove any ANSI color codes before evaluating
+                clean_line=$(echo "$line" | sed 's/\x1b\[[0-9;]*m//g' | sed 's/\033\[[0-9;]*m//g')
+                eval "$clean_line" 2>/dev/null || true
+            fi
+        done < ../.server-config
         if [ -n "$S3_BUCKET_PROD" ]; then
-            echo "     Secret Name: S3_BUCKET_PROD"
+            echo "     Secret Name: S3_BUCKET"
             echo "     Secret Value: $S3_BUCKET_PROD"
             echo ""
-            echo "     Secret Name: S3_BUCKET (for backward compatibility)"
-            echo "     Secret Value: $S3_BUCKET_PROD"
+            echo "     (This is the PRODUCTION bucket for GitHub Actions deployment)"
         fi
     fi
     echo ""
-    echo "  4. If you don't have EC2_SSH_PRIVATE_KEY secret yet, add it:"
+    echo "  4. For local development, add the DEV bucket to your backend/.env file:"
+    echo ""
+    if [ -f "../.server-config" ]; then
+        # Reload to get fresh values
+        while IFS= read -r line || [ -n "$line" ]; do
+            if [[ -n "$line" ]] && [[ ! "$line" =~ ^[[:space:]]*# ]] && [[ "$line" =~ ^[A-Z_][A-Z0-9_]*= ]]; then
+                clean_line=$(echo "$line" | sed 's/\x1b\[[0-9;]*m//g' | sed 's/\033\[[0-9;]*m//g')
+                eval "$clean_line" 2>/dev/null || true
+            fi
+        done < ../.server-config
+        if [ -n "$S3_BUCKET_DEV" ]; then
+            echo "     Add this line to backend/.env:"
+            echo "     S3_BUCKET=$S3_BUCKET_DEV"
+            echo ""
+            echo "     (This is the DEV bucket for local development only)"
+        fi
+    fi
+    echo ""
+    echo "  5. If you don't have EC2_SSH_PRIVATE_KEY secret yet, add it:"
     echo "     Secret Name: EC2_SSH_PRIVATE_KEY"
     echo "     Secret Value: (Copy the contents of ~/.ssh/$KEY_NAME.pem)"
     echo ""
-    echo "  5. To get your SSH private key content, run:"
+    echo "  6. To get your SSH private key content, run:"
     echo "     cat ~/.ssh/$KEY_NAME.pem"
     echo ""
-    echo "  6. Copy the entire output (including -----BEGIN and -----END lines)"
+    echo "  7. Copy the entire output (including -----BEGIN and -----END lines)"
     echo "     and paste it as the value for EC2_SSH_PRIVATE_KEY"
     echo ""
-    echo "  7. Once secrets are updated, push changes to main branch to trigger deployment"
+    echo "  8. Once secrets are updated, push changes to main branch to trigger deployment"
     echo ""
     echo "  🚀 Your application will be available at:"
     echo "     Frontend: http://$EC2_HOST"
@@ -725,13 +815,20 @@ main() {
     echo "  📝 Generated Values Summary:"
     echo "     EC2_HOST: $EC2_HOST"
     if [ -f "../.server-config" ]; then
-        source ../.server-config
-        if [ -n "$S3_BUCKET_DEV" ]; then
-            echo "     S3_BUCKET_DEV: $S3_BUCKET_DEV"
-        fi
+        # Safely load configuration, filtering out any log output or color codes
+        while IFS= read -r line || [ -n "$line" ]; do
+            # Skip empty lines, comments, and lines that don't look like variable assignments
+            if [[ -n "$line" ]] && [[ ! "$line" =~ ^[[:space:]]*# ]] && [[ "$line" =~ ^[A-Z_][A-Z0-9_]*= ]]; then
+                # Remove any ANSI color codes before evaluating
+                clean_line=$(echo "$line" | sed 's/\x1b\[[0-9;]*m//g' | sed 's/\033\[[0-9;]*m//g')
+                eval "$clean_line" 2>/dev/null || true
+            fi
+        done < ../.server-config
         if [ -n "$S3_BUCKET_PROD" ]; then
-            echo "     S3_BUCKET_PROD: $S3_BUCKET_PROD"
-            echo "     S3_BUCKET: $S3_BUCKET_PROD (defaults to prod)"
+            echo "     S3_BUCKET (PROD - for GitHub Actions): $S3_BUCKET_PROD"
+        fi
+        if [ -n "$S3_BUCKET_DEV" ]; then
+            echo "     S3_BUCKET_DEV (for local .env file): $S3_BUCKET_DEV"
         fi
     fi
     echo "     INSTANCE_ID: $INSTANCE_ID"
