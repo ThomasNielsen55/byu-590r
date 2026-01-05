@@ -90,21 +90,29 @@ jobs:
           cd backend
           cp .env.example .env
           php artisan key:generate
-          sed -i 's/DB_HOST=mysql/DB_HOST=127.0.0.1/' .env
+
+          # Set database connection to MySQL for CI environment
+          sed -i 's/DB_CONNECTION=.*/DB_CONNECTION=mysql/' .env || echo "DB_CONNECTION=mysql" >> .env
+          sed -i 's/DB_HOST=mysql/DB_HOST=127.0.0.1/' .env || sed -i 's/DB_HOST=.*/DB_HOST=127.0.0.1/' .env || echo "DB_HOST=127.0.0.1" >> .env
+          sed -i 's/DB_PORT=.*/DB_PORT=3306/' .env || echo "DB_PORT=3306" >> .env
 
           # Use secrets for database configuration
           if [ -n "${{ secrets.DB_DATABASE }}" ]; then
-            sed -i "s/DB_DATABASE=byu_590r_app/DB_DATABASE=${{ secrets.DB_DATABASE }}_test/" .env
+            sed -i "s/DB_DATABASE=.*/DB_DATABASE=${{ secrets.DB_DATABASE }}_test/" .env
           else
-            sed -i 's/DB_DATABASE=byu_590r_app/DB_DATABASE=byu_590r_app_test/' .env
+            sed -i 's/DB_DATABASE=.*/DB_DATABASE=byu_590r_app_test/' .env || echo "DB_DATABASE=byu_590r_app_test" >> .env
           fi
 
           if [ -n "${{ secrets.DB_USERNAME }}" ]; then
-            sed -i "s/DB_USERNAME=byu_user/DB_USERNAME=${{ secrets.DB_USERNAME }}/" .env
+            sed -i "s/DB_USERNAME=.*/DB_USERNAME=${{ secrets.DB_USERNAME }}/" .env
+          else
+            sed -i 's/DB_USERNAME=.*/DB_USERNAME=byu_user/' .env || echo "DB_USERNAME=byu_user" >> .env
           fi
 
           if [ -n "${{ secrets.DB_PASSWORD }}" ]; then
-            sed -i "s/DB_PASSWORD=byu_password/DB_PASSWORD=${{ secrets.DB_PASSWORD }}/" .env
+            sed -i "s/DB_PASSWORD=.*/DB_PASSWORD=${{ secrets.DB_PASSWORD }}/" .env
+          else
+            sed -i 's/DB_PASSWORD=.*/DB_PASSWORD=byu_password/' .env || echo "DB_PASSWORD=byu_password" >> .env
           fi
 
           # Use APP_DEBUG from secrets if provided
@@ -138,6 +146,54 @@ jobs:
           else
             echo "AWS_DEFAULT_REGION=us-west-1" >> .env
           fi
+
+      - name: Update phpunit.xml for MySQL
+        run: |
+          cd backend
+          cat > update_phpunit.py << 'PYEOF'
+          import xml.etree.ElementTree as ET
+          import os
+          import sys
+
+          db_name = (os.environ.get('DB_DATABASE_VAR', '') or 'byu_590r_app') + '_test'
+          db_user = os.environ.get('DB_USERNAME_VAR', '') or 'byu_user'
+          db_pass = os.environ.get('DB_PASSWORD_VAR', '') or 'byu_password'
+
+          tree = ET.parse('phpunit.xml')
+          root = tree.getroot()
+          php_section = root.find('.//php')
+
+          if php_section is not None:
+              for env in php_section.findall('env'):
+                  name = env.get('name')
+                  if name == 'DB_CONNECTION':
+                      env.set('value', 'mysql')
+                  elif name == 'DB_DATABASE':
+                      env.set('value', db_name)
+              
+              env_names = [e.get('name') for e in php_section.findall('env')]
+              mysql_config = [
+                  ('DB_HOST', '127.0.0.1'),
+                  ('DB_PORT', '3306'),
+                  ('DB_USERNAME', db_user),
+                  ('DB_PASSWORD', db_pass)
+              ]
+              
+              for env_name, env_value in mysql_config:
+                  if env_name not in env_names:
+                      new_env = ET.SubElement(php_section, 'env')
+                      new_env.set('name', env_name)
+                      new_env.set('value', env_value)
+
+          ET.indent(tree, space='    ')
+          with open('phpunit.xml', 'wb') as f:
+              tree.write(f, encoding='utf-8', xml_declaration=True)
+          PYEOF
+          DB_DATABASE_VAR="${{ secrets.DB_DATABASE }}" \
+          DB_USERNAME_VAR="${{ secrets.DB_USERNAME }}" \
+          DB_PASSWORD_VAR="${{ secrets.DB_PASSWORD }}" \
+          python3 update_phpunit.py
+          rm -f update_phpunit.py
 
       - name: Run Laravel tests
         run: |
