@@ -7,134 +7,370 @@ on:
     branches: [main]
 
 jobs:
-  # Determine deployment configuration (shared logic)
-  determine-config:
-    name: Determine Deployment Configuration
+  test-frontend:
+    name: Frontend Tests
     runs-on: ubuntu-latest
-    if: github.event_name == 'push'
-    outputs:
-      ec2_host: ${{ steps.config.outputs.ec2_host }}
-      ssh_key: ${{ steps.config.outputs.ssh_key }}
-      branch_name: ${{ steps.config.outputs.branch_name }}
-      should_deploy: ${{ steps.config.outputs.should_deploy }}
 
     steps:
-      - name: Determine deployment configuration
-        id: config
-        env:
-          BRANCH_NAME: ${{ github.ref_name }}
-          EC2_HOST_BRANCH: ${{ secrets[format('EC2_HOST_{0}', github.ref_name)] }}
-          EC2_SSH_KEY_BRANCH: ${{ secrets[format('EC2_SSH_PRIVATE_KEY_{0}', github.ref_name)] }}
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18.20.8"
+          cache: "npm"
+          cache-dependency-path: web-app/package-lock.json
+
+      - name: Install dependencies
         run: |
-          # Main branch uses repo owner's default secrets
-          # Other branches use branch-specific secrets configured by the branch owner
-          SHOULD_DEPLOY="false"
-          EC2_HOST=""
-          SSH_KEY=""
+          cd web-app
+          npm --version
+          node --version
+          npm install
 
-          if [ "$BRANCH_NAME" = "main" ]; then
-            EC2_HOST="${{ secrets.EC2_HOST }}"
-            SSH_KEY="${{ secrets.EC2_SSH_PRIVATE_KEY }}"
-            
-            if [ -n "$EC2_HOST" ] && [ -n "$SSH_KEY" ]; then
-              echo "Using production credentials for main branch (repo owner's secrets)"
-              SHOULD_DEPLOY="true"
-            else
-              echo "Warning: Default secrets (EC2_HOST or EC2_SSH_PRIVATE_KEY) not found for main branch"
-              echo "Skipping deployment. Please configure GitHub secrets:"
-              echo "  - EC2_HOST"
-              echo "  - EC2_SSH_PRIVATE_KEY"
-            fi
-          else
-            # For other branches, use branch-specific secrets
-            if [ -n "$EC2_HOST_BRANCH" ] && [ -n "$EC2_SSH_KEY_BRANCH" ]; then
-              EC2_HOST="$EC2_HOST_BRANCH"
-              SSH_KEY="$EC2_SSH_KEY_BRANCH"
-              echo "Using branch-specific configuration for: $BRANCH_NAME"
-              SHOULD_DEPLOY="true"
-            else
-              echo "Warning: Branch-specific secrets not found for branch: $BRANCH_NAME"
-              echo "Skipping deployment. To enable deployment, configure:"
-              echo "  - EC2_HOST_${BRANCH_NAME}"
-              echo "  - EC2_SSH_PRIVATE_KEY_${BRANCH_NAME}"
-            fi
-          fi
+      - name: Run Angular tests
+        run: |
+          cd web-app
+          npm run test -- --watch=false --browsers=ChromeHeadless
 
-          # Always set outputs, even if deployment should be skipped
-          echo "ec2_host=$EC2_HOST" >> $GITHUB_OUTPUT
-          echo "ssh_key<<EOF" >> $GITHUB_OUTPUT
-          echo "$SSH_KEY" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-          echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
-          echo "should_deploy=$SHOULD_DEPLOY" >> $GITHUB_OUTPUT
-
-          echo ""
-          echo "=== Deployment Configuration Summary ==="
-          echo "Branch: $BRANCH_NAME"
-          echo "EC2_HOST: ${EC2_HOST:-NOT SET}"
-          echo "SSH_KEY: ${SSH_KEY:+SET}${SSH_KEY:-NOT SET}"
-          echo "Should Deploy: $SHOULD_DEPLOY"
-          echo "========================================"
-
-  # Run tests
-  test-frontend:
-    uses: ./.github/workflows/test-frontend.yml
+      - name: Build Angular app
+        run: |
+          cd web-app
+          npm run build
 
   test-backend:
-    uses: ./.github/workflows/test-backend.yml
+    name: Backend Tests
+    runs-on: ubuntu-latest
 
-  # Deploy Backend to EC2
-  deploy-backend:
-    needs: [test-frontend, test-backend, determine-config]
-    uses: ./.github/workflows/deploy-backend.yml
-    if: |
-      github.event_name == 'push' &&
-      needs.determine-config.result == 'success' &&
-      needs.determine-config.outputs.should_deploy == 'true' &&
-      needs.test-frontend.result == 'success' &&
-      needs.test-backend.result == 'success'
-    with:
-      ec2_host: ${{ needs.determine-config.outputs.ec2_host }}
-      ssh_key: ${{ needs.determine-config.outputs.ssh_key }}
-    secrets: inherit
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: ${{ secrets.DB_DATABASE || 'byu_590r_app' }}_test
+          MYSQL_USER: ${{ secrets.DB_USERNAME || 'byu_user' }}
+          MYSQL_PASSWORD: ${{ secrets.DB_PASSWORD || 'byu_password' }}
+        ports:
+          - 3306:3306
+        options: --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=3
 
-  # Deploy Frontend to EC2
-  deploy-frontend:
-    needs: [deploy-backend, determine-config]
-    uses: ./.github/workflows/deploy-frontend.yml
-    if: |
-      github.event_name == 'push' &&
-      needs.determine-config.result == 'success' &&
-      needs.determine-config.outputs.should_deploy == 'true' &&
-      needs.deploy-backend.result == 'success'
-    with:
-      ec2_host: ${{ needs.determine-config.outputs.ec2_host }}
-    secrets: inherit
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-  # Run migrations
-  run-migrations:
-    needs: [deploy-frontend, determine-config]
-    uses: ./.github/workflows/run-migrations.yml
-    if: |
-      github.event_name == 'push' &&
-      needs.determine-config.result == 'success' &&
-      needs.determine-config.outputs.should_deploy == 'true' &&
-      needs.deploy-frontend.result == 'success'
-    with:
-      ec2_host: ${{ needs.determine-config.outputs.ec2_host }}
-      ssh_key: ${{ needs.determine-config.outputs.ssh_key }}
-    secrets: inherit
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          extensions: mbstring, dom, fileinfo, mysql
+          coverage: none
 
-  # Complete deployment
+      - name: Install Composer dependencies
+        run: |
+          cd backend
+          # Try install first, fall back to update if lock file is incompatible
+          set +e
+          OUTPUT=$(composer install -q --no-ansi --no-interaction --no-scripts --no-progress --prefer-dist 2>&1)
+          EXIT_CODE=$?
+          set -e
+
+          if [ $EXIT_CODE -eq 0 ]; then
+            echo "Composer install succeeded"
+          elif echo "$OUTPUT" | grep -q "does not contain a compatible set of packages"; then
+            echo "Lock file incompatible, running composer update..."
+            composer update -q --no-ansi --no-interaction --no-scripts --no-progress --prefer-dist
+          else
+            echo "Composer install failed: $OUTPUT"
+            exit $EXIT_CODE
+          fi
+
+      - name: Setup Laravel environment
+        run: |
+          cd backend
+          cp .env.example .env
+          php artisan key:generate
+          sed -i 's/DB_HOST=mysql/DB_HOST=127.0.0.1/' .env
+
+          # Use secrets for database configuration
+          if [ -n "${{ secrets.DB_DATABASE }}" ]; then
+            sed -i "s/DB_DATABASE=byu_590r_app/DB_DATABASE=${{ secrets.DB_DATABASE }}_test/" .env
+          else
+            sed -i 's/DB_DATABASE=byu_590r_app/DB_DATABASE=byu_590r_app_test/' .env
+          fi
+
+          if [ -n "${{ secrets.DB_USERNAME }}" ]; then
+            sed -i "s/DB_USERNAME=byu_user/DB_USERNAME=${{ secrets.DB_USERNAME }}/" .env
+          fi
+
+          if [ -n "${{ secrets.DB_PASSWORD }}" ]; then
+            sed -i "s/DB_PASSWORD=byu_password/DB_PASSWORD=${{ secrets.DB_PASSWORD }}/" .env
+          fi
+
+          # Use APP_DEBUG from secrets if provided
+          if [ -n "${{ secrets.APP_DEBUG }}" ]; then
+            sed -i "s/APP_DEBUG=.*/APP_DEBUG=${{ secrets.APP_DEBUG }}/" .env
+          else
+            echo "APP_DEBUG=true" >> .env
+          fi
+
+          # Add OPENAI_API_KEY from secrets if provided
+          if [ -n "${{ secrets.OPENAI_API_KEY }}" ]; then
+            sed -i "s/OPENAI_API_KEY=.*/OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}/" .env
+          fi
+
+          # Add S3_BUCKET from secrets if provided
+          if [ -n "${{ secrets.S3_BUCKET }}" ]; then
+            sed -i "s/S3_BUCKET=.*/S3_BUCKET=${{ secrets.S3_BUCKET }}/" .env
+          else
+            echo "S3_BUCKET=byu-590r-$(date +%s)-test" >> .env
+          fi
+
+          # Add AWS credentials for S3 testing
+          if [ -n "${{ secrets.AWS_ACCESS_KEY_ID }}" ]; then
+            echo "AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}" >> .env
+          fi
+          if [ -n "${{ secrets.AWS_SECRET_ACCESS_KEY }}" ]; then
+            echo "AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}" >> .env
+          fi
+          if [ -n "${{ secrets.AWS_REGION }}" ]; then
+            echo "AWS_DEFAULT_REGION=${{ secrets.AWS_REGION }}" >> .env
+          else
+            echo "AWS_DEFAULT_REGION=us-west-1" >> .env
+          fi
+
+      - name: Run Laravel tests
+        run: |
+          cd backend
+          php artisan test
+
+      - name: Generate Laravel application key
+        run: |
+          cd backend
+          php artisan key:generate
+
+  deploy-to-ec2:
+    name: Prod Deploy
+    needs: [test-frontend, test-backend]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+
+      - name: Deploy Backend to EC2
+        run: |
+          # Create directories and set permissions first
+          ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
+            sudo mkdir -p /var/www/html/api
+            sudo chown -R ubuntu:ubuntu /var/www/html/api
+          EOF
+
+          # Copy backend files to EC2
+          rsync -avz --delete -e "ssh -o StrictHostKeyChecking=no" \
+            backend/ ubuntu@${{ secrets.EC2_HOST }}:/var/www/html/api/
+
+          # Use make deploy-ec2 for backend setup
+          ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
+            cd /var/www/html/api
+            
+            # Set proper ownership for configuration
+            sudo chown -R ubuntu:ubuntu /var/www/html/api
+            
+            # Create .env file if it doesn't exist
+            if [ ! -f .env ]; then
+              cp .env.example .env
+              chmod 644 .env
+            fi
+            
+            # Fix DB_HOST for server deployment (change from mysql to localhost)
+            sed -i "s/DB_HOST=mysql/DB_HOST=localhost/" .env
+            
+            # Update .env with GitHub secrets if provided
+            if [ -n "${{ secrets.DB_PASSWORD }}" ]; then
+              sed -i "s/DB_PASSWORD=.*/DB_PASSWORD=${{ secrets.DB_PASSWORD }}/" .env
+            fi
+            
+            if [ -n "${{ secrets.DB_USERNAME }}" ]; then
+              sed -i "s/DB_USERNAME=.*/DB_USERNAME=${{ secrets.DB_USERNAME }}/" .env
+            fi
+            
+            if [ -n "${{ secrets.DB_DATABASE }}" ]; then
+              sed -i "s/DB_DATABASE=.*/DB_DATABASE=${{ secrets.DB_DATABASE }}/" .env
+            fi
+            
+            # Update APP_DEBUG from GitHub secrets if provided
+            if [ -n "${{ secrets.APP_DEBUG }}" ]; then
+              sed -i "s/APP_DEBUG=.*/APP_DEBUG=${{ secrets.APP_DEBUG }}/" .env
+            else
+              echo "APP_DEBUG=true" >> .env
+            fi
+            
+            # Update OPENAI_API_KEY from GitHub secrets if provided
+            if [ -n "${{ secrets.OPENAI_API_KEY }}" ]; then
+              sed -i "s/OPENAI_API_KEY=.*/OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}/" .env
+            fi
+            
+            # Update S3_BUCKET from GitHub secrets if provided
+            if [ -n "${{ secrets.S3_BUCKET_PROD }}" ]; then
+              sed -i "s/S3_BUCKET_PROD=.*/S3_BUCKET_PROD=${{ secrets.S3_BUCKET_PROD }}/" .env || echo "S3_BUCKET_PROD=${{ secrets.S3_BUCKET_PROD }}" >> .env
+            fi
+            if [ -n "${{ secrets.S3_BUCKET_DEV }}" ]; then
+              sed -i "s/S3_BUCKET_DEV=.*/S3_BUCKET_DEV=${{ secrets.S3_BUCKET_DEV }}/" .env || echo "S3_BUCKET_DEV=${{ secrets.S3_BUCKET_DEV }}" >> .env
+            fi
+            if [ -n "${{ secrets.S3_BUCKET }}" ]; then
+              sed -i "s/S3_BUCKET=.*/S3_BUCKET=${{ secrets.S3_BUCKET }}/" .env || echo "S3_BUCKET=${{ secrets.S3_BUCKET }}" >> .env
+            fi
+            
+            # Update AWS credentials from GitHub secrets if provided
+            if [ -n "${{ secrets.AWS_ACCESS_KEY_ID }}" ]; then
+              sed -i "s/AWS_ACCESS_KEY_ID=.*/AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}/" .env || echo "AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}" >> .env
+            fi
+            if [ -n "${{ secrets.AWS_SECRET_ACCESS_KEY }}" ]; then
+              sed -i "s/AWS_SECRET_ACCESS_KEY=.*/AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}/" .env || echo "AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}" >> .env
+            fi
+            if [ -n "${{ secrets.AWS_DEFAULT_REGION }}" ]; then
+              sed -i "s/AWS_DEFAULT_REGION=.*/AWS_DEFAULT_REGION=${{ secrets.AWS_DEFAULT_REGION }}/" .env || echo "AWS_DEFAULT_REGION=${{ secrets.AWS_DEFAULT_REGION }}" >> .env
+            fi
+            
+            # Set APP_ENV to production for deployment
+            sed -i "s/APP_ENV=.*/APP_ENV=production/" .env
+            # Try install first, fall back to update if lock file is incompatible
+            set +e
+            OUTPUT=$(composer install -q --no-ansi --no-interaction --no-scripts --no-progress --prefer-dist --no-dev --optimize-autoloader 2>&1)
+            EXIT_CODE=$?
+            set -e
+            
+            if [ $EXIT_CODE -eq 0 ]; then
+              echo "Composer install succeeded"
+            elif echo "$OUTPUT" | grep -q "does not contain a compatible set of packages"; then
+              echo "Lock file incompatible, running composer update..."
+              composer update -q --no-ansi --no-interaction --no-scripts --no-progress --prefer-dist --no-dev --optimize-autoloader
+            else
+              echo "Composer install failed: $OUTPUT"
+              exit $EXIT_CODE
+            fi
+            
+            # Generate application key if not set
+            if ! grep -q "APP_KEY=" .env || grep -q "APP_KEY=$" .env; then
+              php artisan key:generate
+            fi
+            
+            # Clear config cache to ensure new key is loaded
+            rm -f bootstrap/cache/config.php
+            php artisan config:clear
+            
+            # Create storage directories if they don't exist
+            sudo mkdir -p /var/www/html/api/storage/framework/cache
+            sudo mkdir -p /var/www/html/api/storage/framework/sessions
+            sudo mkdir -p /var/www/html/api/storage/framework/views
+            sudo mkdir -p /var/www/html/api/storage/logs
+            sudo mkdir -p /var/www/html/api/storage/app
+            sudo mkdir -p /var/www/html/api/bootstrap/cache
+            
+            # Set ownership to ubuntu:www-data so both ubuntu (for artisan commands) and www-data (for Apache) can write
+            sudo chown -R ubuntu:www-data /var/www/html/api
+            sudo chmod -R 755 /var/www/html/api
+            
+            # Set writable permissions for storage and cache directories (775 allows group write)
+            sudo chmod -R 775 /var/www/html/api/storage
+            sudo chmod -R 775 /var/www/html/api/bootstrap/cache
+            
+            # Ensure all storage subdirectories have correct permissions
+            sudo chmod -R 775 /var/www/html/api/storage/logs
+            sudo chmod -R 775 /var/www/html/api/storage/framework
+            sudo chmod -R 775 /var/www/html/api/storage/framework/cache
+            sudo chmod -R 775 /var/www/html/api/storage/framework/sessions
+            sudo chmod -R 775 /var/www/html/api/storage/framework/views
+            sudo chmod -R 775 /var/www/html/api/storage/app
+            
+            # Run database migrations fresh with seeding
+            php artisan migrate:fresh --seed --force
+            
+            # Configure Laravel for production (skip config cache to avoid APP_KEY issues)
+            php artisan route:cache
+            php artisan view:cache
+            
+            # Final permission fix after artisan commands (in case files were created)
+            sudo chown -R ubuntu:www-data /var/www/html/api/storage
+            sudo chown -R ubuntu:www-data /var/www/html/api/bootstrap/cache
+            sudo chmod -R 775 /var/www/html/api/storage
+            sudo chmod -R 775 /var/www/html/api/bootstrap/cache
+            
+            # Restart Apache
+            sudo systemctl reload apache2
+          EOF
+
+      - name: Deploy Frontend to EC2
+        run: |
+          # Build Angular app locally using make
+          make build-frontend-prod
+
+          # Create app directory and set permissions
+          ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
+            sudo mkdir -p /var/www/html/app
+            sudo chown -R ubuntu:ubuntu /var/www/html/app
+          EOF
+
+          # Copy built files to EC2
+          rsync -avz --delete -e "ssh -o StrictHostKeyChecking=no" \
+            web-app/dist/byu-590r-builder/ ubuntu@${{ secrets.EC2_HOST }}:/var/www/html/app/
+
+          # Set proper permissions and restart Apache
+          ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
+            sudo chown -R www-data:www-data /var/www/html/app
+            sudo chmod -R 755 /var/www/html/app
+            sudo systemctl reload apache2
+          EOF
+
+      - name: Verify Deployment
+        run: |
+          # Wait a moment for services to start
+          sleep 10
+
+          # Check if services are running
+          ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
+            echo "=== Apache Status ==="
+            sudo systemctl status apache2 --no-pager
+            echo "=== MySQL Status ==="
+            sudo systemctl status mysql --no-pager
+            echo "=== Laravel API Test ==="
+            curl -f http://localhost:4444/api/hello || echo "API endpoint not responding"
+            echo "=== Frontend Test ==="
+            curl -f http://localhost/ || echo "Frontend not responding"
+          EOF
+
   deploy-complete:
-    needs: [run-migrations, determine-config]
-    uses: ./.github/workflows/deploy-complete.yml
-    if: |
-      github.event_name == 'push' &&
-      needs.determine-config.result == 'success' &&
-      needs.determine-config.outputs.should_deploy == 'true' &&
-      needs.run-migrations.result == 'success'
-    with:
-      ec2_host: ${{ needs.determine-config.outputs.ec2_host }}
-      branch_name: ${{ needs.determine-config.outputs.branch_name }}
-    secrets: inherit
+    name: Deploy Complete
+    needs: [deploy-to-ec2]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Comment deployment success
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // Only comment on pull requests, not on direct pushes to main
+            if (context.payload.pull_request) {
+              github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: `🚀 **EC2 Deployment Successful!**\n\n✅ **Frontend**: Deployed to EC2 (Apache)\n🔗 **Frontend URL**: http://${{ secrets.EC2_HOST }}\n\n✅ **Backend**: Deployed to EC2 (Apache)\n🔗 **Backend API**: http://${{ secrets.EC2_HOST }}:4444/api/hello\n\n🎉 Your BYU 590R Monorepo is now running on EC2 with Apache!`
+              });
+            } else {
+              // For direct pushes to main, create a deployment status
+              console.log('🚀 EC2 Deployment Successful!');
+              console.log('✅ Frontend: Deployed to EC2 (Apache)');
+              console.log(`🔗 Frontend URL: http://${{ secrets.EC2_HOST }}`);
+              console.log('✅ Backend: Deployed to EC2 (Apache)');
+              console.log(`🔗 Backend API: http://${{ secrets.EC2_HOST }}:4444/api/hello`);
+              console.log('🎉 Your BYU 590R Monorepo is now running on EC2 with Apache!');
+            }
