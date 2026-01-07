@@ -446,9 +446,60 @@ jobs:
             sudo chmod -R 775 /var/www/html/api/storage
             sudo chmod -R 775 /var/www/html/api/bootstrap/cache
             
+            # Ensure PHP module is enabled
+            echo "=== Checking PHP module ==="
+            php -v
+            if ! php -m | grep -q "pdo_mysql"; then
+              echo "WARNING: PDO MySQL extension not loaded"
+            fi
+            
+            # Ensure Apache PHP module is enabled
+            if ! apache2ctl -M 2>/dev/null | grep -q "php"; then
+              echo "WARNING: PHP module may not be loaded in Apache"
+              sudo a2enmod php8.3 2>/dev/null || true
+            fi
+            
+            # Ensure required Apache modules are enabled
+            sudo a2enmod rewrite 2>/dev/null || true
+            sudo a2enmod headers 2>/dev/null || true
+            sudo a2enmod php8.3 2>/dev/null || true
+            
+            # Verify Laravel public directory exists and has index.php
+            echo "=== Verifying Laravel structure ==="
+            if [ ! -f /var/www/html/api/public/index.php ]; then
+              echo "ERROR: Laravel public/index.php not found!"
+              echo "Checking directory structure:"
+              ls -la /var/www/html/api/ | head -20
+            else
+              echo "✓ Laravel public/index.php exists"
+            fi
+            
+            # Verify .htaccess exists
+            if [ ! -f /var/www/html/api/public/.htaccess ]; then
+              echo "WARNING: .htaccess file not found in public directory"
+            else
+              echo "✓ .htaccess file exists"
+            fi
+            
             # Ensure Apache virtual host is enabled and port is configured
             if [ ! -f /etc/apache2/sites-enabled/byu-590r-backend.conf ]; then
               sudo a2ensite byu-590r-backend.conf 2>/dev/null || true
+            fi
+            
+            # Verify and potentially fix virtual host configuration
+            echo "=== Checking Apache virtual host ==="
+            if [ -f /etc/apache2/sites-available/byu-590r-backend.conf ]; then
+              echo "Virtual host config found:"
+              grep -E "DocumentRoot|Directory|VirtualHost|DirectoryIndex" /etc/apache2/sites-available/byu-590r-backend.conf | head -10
+              
+              # Ensure DirectoryIndex includes index.php
+              if ! grep -q "DirectoryIndex.*index.php" /etc/apache2/sites-available/byu-590r-backend.conf; then
+                echo "WARNING: DirectoryIndex may not include index.php"
+              fi
+            else
+              echo "ERROR: Virtual host config not found! Creating it..."
+              printf '%s\n' '<VirtualHost *:4444>' '    ServerName localhost' '    DocumentRoot /var/www/html/api/public' '' '    <Directory /var/www/html/api/public>' '        AllowOverride All' '        Require all granted' '        Options Indexes FollowSymLinks' '' '        # Laravel routing' '        RewriteEngine On' '        RewriteCond %{REQUEST_FILENAME} !-f' '        RewriteCond %{REQUEST_FILENAME} !-d' '        RewriteRule ^(.*)$ index.php [QSA,L]' '' '        # Set index files' '        DirectoryIndex index.php index.html' '    </Directory>' '' '    # PHP handling' '    <FilesMatch \.php$>' '        SetHandler application/x-httpd-php' '    </FilesMatch>' '' '    ErrorLog ${APACHE_LOG_DIR}/byu590r_backend_error.log' '    CustomLog ${APACHE_LOG_DIR}/byu590r_backend_access.log combined' '</VirtualHost>' | sudo tee /etc/apache2/sites-available/byu-590r-backend.conf > /dev/null
+              sudo a2ensite byu-590r-backend.conf
             fi
             
             # Ensure port 4444 is listening
@@ -457,20 +508,41 @@ jobs:
             fi
             
             # Test Apache configuration
+            echo "=== Testing Apache configuration ==="
             sudo apache2ctl configtest
             
             # Restart Apache (not just reload) to ensure all changes take effect
             sudo systemctl restart apache2
             
+            # Wait for Apache to fully restart
+            sleep 3
+            
             # Verify Apache is listening on port 4444
-            sleep 2
+            echo "=== Verifying Apache status ==="
             if sudo netstat -tlnp | grep -q ":4444" || sudo ss -tlnp | grep -q ":4444"; then
               echo "✓ Apache is listening on port 4444"
             else
               echo "✗ WARNING: Apache may not be listening on port 4444"
-              echo "Apache error log:"
-              sudo tail -20 /var/log/apache2/byu590r_backend_error.log 2>/dev/null || sudo tail -20 /var/log/apache2/error.log
             fi
+            
+            # Test PHP processing
+            echo "=== Testing PHP processing ==="
+            if [ -f /var/www/html/api/public/index.php ]; then
+              # Create a test PHP file to verify PHP is working
+              echo "<?php phpinfo(); ?>" | sudo tee /var/www/html/api/public/test-php.php > /dev/null
+              PHP_TEST=$(curl -s http://localhost:4444/test-php.php | head -5)
+              if echo "$PHP_TEST" | grep -q "PHP Version"; then
+                echo "✓ PHP is processing correctly"
+              else
+                echo "✗ WARNING: PHP may not be processing correctly"
+                echo "PHP test response: $PHP_TEST"
+              fi
+              sudo rm -f /var/www/html/api/public/test-php.php
+            fi
+            
+            # Check Apache error logs for issues
+            echo "=== Recent Apache errors ==="
+            sudo tail -30 /var/log/apache2/byu590r_backend_error.log 2>/dev/null || sudo tail -30 /var/log/apache2/error.log 2>/dev/null | tail -10
           EOF
 
       - name: Deploy Frontend to EC2

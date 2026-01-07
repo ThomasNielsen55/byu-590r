@@ -50,8 +50,11 @@ test.describe("Deployment Verification", () => {
 		await page.waitForLoadState("networkidle");
 
 		// Check for "Login Here" text - it appears in both the title and button
-		// First check the page title/card title
-		const loginHereTitle = page.getByText("Login Here", { exact: true });
+		// Use a more specific locator to avoid strict mode violation (multiple matches)
+		// Check for the card title specifically
+		const loginHereTitle = page
+			.locator("mat-card-title")
+			.getByText("Login Here", { exact: true });
 		await expect(loginHereTitle).toBeVisible({ timeout: 10000 });
 
 		// Also check for the button with "Login Here" text
