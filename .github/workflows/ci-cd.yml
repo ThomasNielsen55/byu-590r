@@ -453,16 +453,24 @@ jobs:
               echo "WARNING: PDO MySQL extension not loaded"
             fi
             
-            # Ensure Apache PHP module is enabled
-            if ! apache2ctl -M 2>/dev/null | grep -q "php"; then
-              echo "WARNING: PHP module may not be loaded in Apache"
-              sudo a2enmod php8.3 2>/dev/null || true
-            fi
-            
             # Ensure required Apache modules are enabled
+            echo "=== Enabling Apache modules ==="
             sudo a2enmod rewrite 2>/dev/null || true
             sudo a2enmod headers 2>/dev/null || true
-            sudo a2enmod php8.3 2>/dev/null || true
+            
+            # Enable PHP module - check for both php8.3 and php8.1
+            if apache2ctl -M 2>/dev/null | grep -q "php8.3"; then
+              echo "✓ PHP 8.3 module is loaded"
+            elif apache2ctl -M 2>/dev/null | grep -q "php"; then
+              echo "✓ PHP module is loaded (version unknown)"
+            else
+              echo "Enabling PHP module..."
+              sudo a2enmod php8.3 2>/dev/null || sudo a2enmod php8.1 2>/dev/null || sudo a2enmod php 2>/dev/null || true
+            fi
+            
+            # List loaded modules for debugging
+            echo "Loaded Apache modules:"
+            apache2ctl -M 2>/dev/null | grep -E "php|rewrite|headers" || echo "Could not list modules"
             
             # Verify Laravel public directory exists and has index.php
             echo "=== Verifying Laravel structure ==="
@@ -495,6 +503,15 @@ jobs:
               # Ensure DirectoryIndex includes index.php
               if ! grep -q "DirectoryIndex.*index.php" /etc/apache2/sites-available/byu-590r-backend.conf; then
                 echo "WARNING: DirectoryIndex may not include index.php"
+                sudo sed -i '/<Directory.*public>/a\        DirectoryIndex index.php index.html' /etc/apache2/sites-available/byu-590r-backend.conf
+              fi
+              
+              # Ensure PHP handler is configured
+              if ! grep -qE "SetHandler.*php|AddType.*php" /etc/apache2/sites-available/byu-590r-backend.conf; then
+                echo "Adding PHP handler to virtual host..."
+                PHP_HANDLER=$(apache2ctl -M 2>/dev/null | grep -o "php[0-9.]*" | head -1 || echo "php")
+                # Insert PHP handling before closing Directory tag
+                sudo sed -i '/<\/Directory>/i\    # PHP handling\n    <FilesMatch \\.php$>\n        SetHandler application/x-httpd-'$PHP_HANDLER'\n    </FilesMatch>\n    AddType application/x-httpd-php .php' /etc/apache2/sites-available/byu-590r-backend.conf
               fi
             else
               echo "ERROR: Virtual host config not found! Creating it..."
