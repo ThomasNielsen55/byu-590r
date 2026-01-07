@@ -245,32 +245,68 @@ jobs:
               chmod 644 .env
             fi
             
-            # Set database connection to MySQL
-            sed -i 's/DB_CONNECTION=.*/DB_CONNECTION=mysql/' .env || echo "DB_CONNECTION=mysql" >> .env
+            # Set database connection to MySQL (ensure it exists)
+            if grep -q "^DB_CONNECTION=" .env; then
+              sed -i 's/^DB_CONNECTION=.*/DB_CONNECTION=mysql/' .env
+            else
+              echo "DB_CONNECTION=mysql" >> .env
+            fi
             
             # Fix DB_HOST for server deployment (change from mysql to localhost)
-            sed -i "s/DB_HOST=mysql/DB_HOST=localhost/" .env || sed -i 's/DB_HOST=.*/DB_HOST=localhost/' .env || echo "DB_HOST=localhost" >> .env
+            if grep -q "^DB_HOST=" .env; then
+              sed -i 's/^DB_HOST=.*/DB_HOST=localhost/' .env
+            else
+              echo "DB_HOST=localhost" >> .env
+            fi
             
             # Set DB_PORT to 3306 for MySQL
-            sed -i 's/DB_PORT=.*/DB_PORT=3306/' .env || echo "DB_PORT=3306" >> .env
+            if grep -q "^DB_PORT=" .env; then
+              sed -i 's/^DB_PORT=.*/DB_PORT=3306/' .env
+            else
+              echo "DB_PORT=3306" >> .env
+            fi
             
             # Update .env with GitHub secrets if provided
             if [ -n "${{ secrets.DB_PASSWORD }}" ]; then
-              sed -i "s/DB_PASSWORD=.*/DB_PASSWORD=${{ secrets.DB_PASSWORD }}/" .env
+              if grep -q "^DB_PASSWORD=" .env; then
+                sed -i "s/^DB_PASSWORD=.*/DB_PASSWORD=${{ secrets.DB_PASSWORD }}/" .env
+              else
+                echo "DB_PASSWORD=${{ secrets.DB_PASSWORD }}" >> .env
+              fi
             else
-              sed -i "s/DB_PASSWORD=.*/DB_PASSWORD=byu_password/" .env || echo "DB_PASSWORD=byu_password" >> .env
+              if grep -q "^DB_PASSWORD=" .env; then
+                sed -i "s/^DB_PASSWORD=.*/DB_PASSWORD=byu_password/" .env
+              else
+                echo "DB_PASSWORD=byu_password" >> .env
+              fi
             fi
             
             if [ -n "${{ secrets.DB_USERNAME }}" ]; then
-              sed -i "s/DB_USERNAME=.*/DB_USERNAME=${{ secrets.DB_USERNAME }}/" .env
+              if grep -q "^DB_USERNAME=" .env; then
+                sed -i "s/^DB_USERNAME=.*/DB_USERNAME=${{ secrets.DB_USERNAME }}/" .env
+              else
+                echo "DB_USERNAME=${{ secrets.DB_USERNAME }}" >> .env
+              fi
             else
-              sed -i "s/DB_USERNAME=.*/DB_USERNAME=byu_user/" .env || echo "DB_USERNAME=byu_user" >> .env
+              if grep -q "^DB_USERNAME=" .env; then
+                sed -i "s/^DB_USERNAME=.*/DB_USERNAME=byu_user/" .env
+              else
+                echo "DB_USERNAME=byu_user" >> .env
+              fi
             fi
             
             if [ -n "${{ secrets.DB_DATABASE }}" ]; then
-              sed -i "s/DB_DATABASE=.*/DB_DATABASE=${{ secrets.DB_DATABASE }}/" .env
+              if grep -q "^DB_DATABASE=" .env; then
+                sed -i "s/^DB_DATABASE=.*/DB_DATABASE=${{ secrets.DB_DATABASE }}/" .env
+              else
+                echo "DB_DATABASE=${{ secrets.DB_DATABASE }}" >> .env
+              fi
             else
-              sed -i "s/DB_DATABASE=.*/DB_DATABASE=byu_590r_app/" .env || echo "DB_DATABASE=byu_590r_app" >> .env
+              if grep -q "^DB_DATABASE=" .env; then
+                sed -i "s/^DB_DATABASE=.*/DB_DATABASE=byu_590r_app/" .env
+              else
+                echo "DB_DATABASE=byu_590r_app" >> .env
+              fi
             fi
             
             # Update APP_DEBUG from GitHub secrets if provided
@@ -308,13 +344,24 @@ jobs:
             fi
             
             # Set APP_ENV to production for deployment
-            sed -i "s/APP_ENV=.*/APP_ENV=production/" .env
+            sed -i "s/APP_ENV=.*/APP_ENV=production/" .env || echo "APP_ENV=production" >> .env
             
-            # Verify database configuration is set correctly
+            # Verify database configuration is set correctly (after all settings)
             echo "=== Verifying database configuration ==="
-            grep "DB_CONNECTION" .env || echo "ERROR: DB_CONNECTION not found in .env"
-            grep "DB_HOST" .env || echo "ERROR: DB_HOST not found in .env"
-            grep "DB_DATABASE" .env || echo "ERROR: DB_DATABASE not found in .env"
+            if ! grep -q "^DB_CONNECTION=" .env; then
+              echo "ERROR: DB_CONNECTION not found in .env, adding it..."
+              echo "DB_CONNECTION=mysql" >> .env
+            fi
+            if ! grep -q "^DB_HOST=" .env; then
+              echo "ERROR: DB_HOST not found in .env, adding it..."
+              echo "DB_HOST=localhost" >> .env
+            fi
+            if ! grep -q "^DB_DATABASE=" .env; then
+              echo "ERROR: DB_DATABASE not found in .env, adding default..."
+              echo "DB_DATABASE=byu_590r_app" >> .env
+            fi
+            echo "Database configuration:"
+            grep "^DB_" .env | head -6
             
             # Clear any cached config BEFORE composer install to ensure fresh config
             rm -f bootstrap/cache/config.php
