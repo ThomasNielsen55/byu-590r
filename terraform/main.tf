@@ -60,11 +60,25 @@ resource "aws_security_group_rule" "backend_api" {
   description       = "Backend API access"
 }
 
+# Allow all outbound traffic (apt, curl, Composer, etc.)
+resource "aws_security_group_rule" "egress_all" {
+  type              = "egress"
+  from_port         = 0
+  to_port           = 0
+  protocol          = "-1"
+  cidr_blocks       = ["0.0.0.0/0"]
+  security_group_id = aws_security_group.byu_590r_sg.id
+  description       = "Allow all outbound"
+}
+
 # User data script for EC2 instance setup
 locals {
   user_data = <<-EOF
 #!/bin/bash
 set -e
+
+# Force apt to use IPv4 only (avoids IPv6 unreachable / timeouts in VPCs without IPv6 egress)
+echo 'Acquire::ForceIPv4 "true";' | sudo tee /etc/apt/apt.conf.d/99force-ipv4
 
 # Update system
 sudo apt update && sudo apt upgrade -y
@@ -231,13 +245,14 @@ echo "Server setup complete! Ready for GitHub Actions deployment."
 EOF
 }
 
-# EC2 Instance
+# EC2 Instance (in default VPC/subnet so it gets a public IP for outbound until EIP is associated)
 resource "aws_instance" "byu_590r_server" {
-  ami                    = var.ami_id
-  instance_type          = var.instance_type
-  key_name               = var.key_name
-  vpc_security_group_ids = [aws_security_group.byu_590r_sg.id]
-  user_data              = base64encode(local.user_data)
+  ami                         = var.ami_id
+  instance_type               = var.instance_type
+  key_name                    = var.key_name
+  vpc_security_group_ids      = [aws_security_group.byu_590r_sg.id]
+  associate_public_ip_address = true
+  user_data                   = base64encode(local.user_data)
 
   tags = {
     Name = "${var.project_name}-server"
