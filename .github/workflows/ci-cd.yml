@@ -147,11 +147,11 @@ jobs:
             exit 1
           fi
 
-          # .env: create from example if needed, then apply secrets
+          # .env: create from example if needed, then apply secrets (DB_CONNECTION=mysql required on server; Laravel defaults to sqlite otherwise)
           if [ ! -f .env ]; then
             cp .env.example .env
           fi
-          sed -i 's/^DB_CONNECTION=.*/DB_CONNECTION=mysql/' .env
+          grep -q '^DB_CONNECTION=' .env && sed -i 's/^DB_CONNECTION=.*/DB_CONNECTION=mysql/' .env || echo 'DB_CONNECTION=mysql' >> .env
           sed -i 's/^DB_HOST=.*/DB_HOST=localhost/' .env
           sed -i 's/^DB_PORT=.*/DB_PORT=3306/' .env
           sed -i "s/^DB_DATABASE=.*/DB_DATABASE=${DB_DATABASE:-byu_590r_app}/" .env
