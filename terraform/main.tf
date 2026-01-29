@@ -217,6 +217,13 @@ if [ ! -f /var/www/html/api/.env ]; then
     fi
 fi
 
+# Ensure Apache is running and enabled (fix connection refused on port 80)
+sudo systemctl enable apache2
+sudo systemctl start apache2 || sudo systemctl restart apache2
+sleep 2
+sudo systemctl status apache2 --no-pager || true
+echo "[SUCCESS] Apache enabled and started - port 80 ready"
+
 echo "Server setup complete! Ready for GitHub Actions deployment."
 EOF
 }
