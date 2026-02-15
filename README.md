@@ -1,4 +1,4 @@
-# BYU 590R Mo norepo
+# BYU 590R Monorepo
 
 Laravel backend + Angular frontend with AWS EC2 deployment.
 
