@@ -30,8 +30,8 @@ chmod +x setup-ec2-server.sh
 2. Update the `apiUrl` to use your new EC2 IP address:
    ```typescript
    export const environment = {
-   	production: true,
-   	apiUrl: "http://YOUR_NEW_EC2_IP:4444/api/",
+     production: true,
+     apiUrl: "http://YOUR_NEW_EC2_IP:4444/api/",
    };
    ```
 3. Commit and push the change - the frontend will be rebuilt and redeployed automatically
@@ -81,45 +81,45 @@ This is required because the production Angular app makes direct API calls (no p
 
    ```json
    {
-   	"Version": "2012-10-17",
-   	"Statement": [
-   		{
-   			"Effect": "Allow",
-   			"Action": [
-   				"ec2:RunInstances",
-   				"ec2:TerminateInstances",
-   				"ec2:DescribeInstances",
-   				"ec2:DescribeImages",
-   				"ec2:DescribeSecurityGroups",
-   				"ec2:AuthorizeSecurityGroupIngress",
-   				"ec2:AllocateAddress",
-   				"ec2:AssociateAddress",
-   				"ec2:DescribeAddresses",
-   				"ec2:CreateTags",
-   				"ec2:DescribeTags"
-   			],
-   			"Resource": "*"
-   		},
-   		{
-   			"Effect": "Allow",
-   			"Action": [
-   				"s3:CreateBucket",
-   				"s3:DeleteBucket",
-   				"s3:ListBucket",
-   				"s3:GetBucketLocation",
-   				"s3:GetBucketAcl",
-   				"s3:PutBucketAcl",
-   				"s3:PutBucketPublicAccessBlock",
-   				"s3:GetBucketPublicAccessBlock",
-   				"s3:PutObject",
-   				"s3:GetObject",
-   				"s3:DeleteObject",
-   				"s3:PutObjectAcl",
-   				"s3:GetObjectAcl"
-   			],
-   			"Resource": ["arn:aws:s3:::byu-590r-*", "arn:aws:s3:::byu-590r-*/*"]
-   		}
-   	]
+     "Version": "2012-10-17",
+     "Statement": [
+       {
+         "Effect": "Allow",
+         "Action": [
+           "ec2:RunInstances",
+           "ec2:TerminateInstances",
+           "ec2:DescribeInstances",
+           "ec2:DescribeImages",
+           "ec2:DescribeSecurityGroups",
+           "ec2:AuthorizeSecurityGroupIngress",
+           "ec2:AllocateAddress",
+           "ec2:AssociateAddress",
+           "ec2:DescribeAddresses",
+           "ec2:CreateTags",
+           "ec2:DescribeTags"
+         ],
+         "Resource": "*"
+       },
+       {
+         "Effect": "Allow",
+         "Action": [
+           "s3:CreateBucket",
+           "s3:DeleteBucket",
+           "s3:ListBucket",
+           "s3:GetBucketLocation",
+           "s3:GetBucketAcl",
+           "s3:PutBucketAcl",
+           "s3:PutBucketPublicAccessBlock",
+           "s3:GetBucketPublicAccessBlock",
+           "s3:PutObject",
+           "s3:GetObject",
+           "s3:DeleteObject",
+           "s3:PutObjectAcl",
+           "s3:GetObjectAcl"
+         ],
+         "Resource": ["arn:aws:s3:::byu-590r-*", "arn:aws:s3:::byu-590r-*/*"]
+       }
+     ]
    }
    ```
 
