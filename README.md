@@ -218,6 +218,13 @@ cd devops/bash
 - Frontend: http://localhost:4200
 - Backend API: http://localhost:8000
 
+### Local S3 and demo book images
+
+For local development you do **not** need AWS S3. The app uses `FILESYSTEM_DISK=local` (see `backend/.env.example`) and serves book cover images from local storage.
+
+- **Demo images**: Place cover images in `backend/public/assets/books/` (e.g. `hp1.jpeg`, `bom.jpg` — see that directory’s README). During `make start`, `app:setup-demo-images` copies them into `storage/app/public/images/` and creates the storage link so seeded books show covers at `/storage/images/...`.
+- To use real S3 locally, set `FILESYSTEM_DISK=s3` and add `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and `S3_BUCKET` (or `S3_BUCKET_DEV`) in `backend/.env`.
+
 ## Credits
 
 This project was created for educational purposes for BYU IS 590R course - John Christiansen. 10/2025. All Rights Reserved
