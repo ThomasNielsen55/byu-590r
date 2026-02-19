@@ -14,7 +14,6 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
-import { MatDialogModule, MatDialog } from '@angular/material/dialog';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 
@@ -29,7 +28,6 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
     MatInputModule,
     MatButtonModule,
     MatIconModule,
-    MatDialogModule,
     MatProgressSpinnerModule,
     MatSnackBarModule,
   ],
@@ -41,17 +39,17 @@ export class LoginComponent {
   private authStore = inject(AuthStore);
   private router = inject(Router);
   private fb = inject(FormBuilder);
-  private dialog = inject(MatDialog);
   private snackBar = inject(MatSnackBar);
 
   loginForm: FormGroup;
   registerForm: FormGroup;
   forgotPasswordForm: FormGroup;
 
+  /** Current card view: login form, forgot password, or register */
+  view = signal<'login' | 'forgot-password' | 'register'>('login');
+
   isLoading = signal(false);
   errorMsg = signal('');
-  passwordResetDialog = signal(false);
-  registerDialog = signal(false);
   submitForgotPasswordLoading = signal(false);
   registerFormIsLoading = signal(false);
 
@@ -140,7 +138,7 @@ export class LoginComponent {
             }
           );
           this.submitForgotPasswordLoading.set(false);
-          this.passwordResetDialog.set(false);
+          this.view.set('login');
         },
         error: () => {
           this.submitForgotPasswordLoading.set(false);
@@ -162,7 +160,7 @@ export class LoginComponent {
           verticalPosition: 'top',
         });
         this.registerFormIsLoading.set(false);
-        this.registerDialog.set(false);
+        this.view.set('login');
       },
       error: () => {
         this.snackBar.open('Error! Registration failed.', 'Close', {
