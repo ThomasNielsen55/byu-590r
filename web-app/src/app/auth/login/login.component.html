@@ -1,14 +1,32 @@
 <div class="login-page-content" [class.view-register]="view() === 'register'">
   <div class="auth-wrapper">
     <nav class="auth-nav">
-      <button mat-button [class.active]="view() === 'login'" (click)="view.set('login')">Login</button>
-      <button mat-button [class.active]="view() === 'forgot-password'" (click)="view.set('forgot-password')">Forgot Password</button>
-      <button mat-button [class.active]="view() === 'register'" (click)="view.set('register')">Register</button>
+      <button
+        mat-button
+        [class.active]="view() === 'login'"
+        (click)="view.set('login')"
+      >
+        Login
+      </button>
+      <button
+        mat-button
+        [class.active]="view() === 'forgot-password'"
+        (click)="view.set('forgot-password')"
+      >
+        Forgot Password
+      </button>
+      <button
+        mat-button
+        [class.active]="view() === 'register'"
+        (click)="view.set('register')"
+      >
+        Register
+      </button>
     </nav>
 
     <mat-card class="login-box">
       @switch (view()) {
-        @case ('login') {
+        @case ("login") {
           <mat-card-header>
             <mat-card-title>Login Here</mat-card-title>
           </mat-card-header>
@@ -18,7 +36,10 @@
                 <mat-form-field appearance="outline" class="full-width">
                   <mat-label>Email</mat-label>
                   <input matInput type="email" formControlName="email" />
-                  @if (loginForm.get('email')?.invalid && loginForm.get('email')?.touched) {
+                  @if (
+                    loginForm.get("email")?.invalid &&
+                    loginForm.get("email")?.touched
+                  ) {
                     <mat-error>Email is required and must be valid</mat-error>
                   }
                 </mat-form-field>
@@ -26,8 +47,14 @@
                 <mat-form-field appearance="outline" class="full-width">
                   <mat-label>Password</mat-label>
                   <input matInput type="password" formControlName="password" />
-                  @if (loginForm.get('password')?.invalid && loginForm.get('password')?.touched) {
-                    <mat-error>Password is required and must be at least 8 characters</mat-error>
+                  @if (
+                    loginForm.get("password")?.invalid &&
+                    loginForm.get("password")?.touched
+                  ) {
+                    <mat-error
+                      >Password is required and must be at least 8
+                      characters</mat-error
+                    >
                   }
                 </mat-form-field>
               </div>
@@ -40,17 +67,23 @@
             </form>
           </mat-card-content>
           <mat-card-actions class="button-group">
-            <button mat-raised-button color="primary" type="submit" [disabled]="!loginForm.valid || isLoading()" (click)="submitLogin()">
+            <button
+              mat-raised-button
+              color="primary"
+              type="submit"
+              [disabled]="!loginForm.valid || isLoading()"
+              (click)="submitLogin()"
+            >
               @if (isLoading()) {
                 <mat-spinner diameter="20"></mat-spinner>
                 <span>Loading...</span>
               } @else {
-                <span>Login</span>
+                <span>Login Here</span>
               }
             </button>
           </mat-card-actions>
         }
-        @case ('forgot-password') {
+        @case ("forgot-password") {
           <mat-card-header>
             <mat-card-title>Password Reset</mat-card-title>
           </mat-card-header>
@@ -63,7 +96,14 @@
             </form>
           </mat-card-content>
           <mat-card-actions class="button-group">
-            <button mat-raised-button color="primary" [disabled]="!forgotPasswordForm.valid || submitForgotPasswordLoading()" (click)="submitForgotPassword()">
+            <button
+              mat-raised-button
+              color="primary"
+              [disabled]="
+                !forgotPasswordForm.valid || submitForgotPasswordLoading()
+              "
+              (click)="submitForgotPassword()"
+            >
               @if (submitForgotPasswordLoading()) {
                 <mat-spinner diameter="20"></mat-spinner>
                 <span>Loading...</span>
@@ -73,7 +113,7 @@
             </button>
           </mat-card-actions>
         }
-        @case ('register') {
+        @case ("register") {
           <mat-card-header>
             <mat-card-title>Register a User</mat-card-title>
           </mat-card-header>
@@ -94,15 +134,24 @@
               <mat-form-field appearance="outline" class="full-width">
                 <mat-label>Password Confirmation</mat-label>
                 <input matInput type="password" formControlName="c_password" />
-                @if (registerForm.get('c_password')?.hasError('passwordMismatch')) {
-                  <mat-error>The password confirmation does not match.</mat-error>
+                @if (
+                  registerForm.get("c_password")?.hasError("passwordMismatch")
+                ) {
+                  <mat-error
+                    >The password confirmation does not match.</mat-error
+                  >
                 }
               </mat-form-field>
               <small>Required fields</small>
             </form>
           </mat-card-content>
           <mat-card-actions class="button-group">
-            <button mat-raised-button color="primary" [disabled]="!registerForm.valid || registerFormIsLoading()" (click)="submitRegister()">
+            <button
+              mat-raised-button
+              color="primary"
+              [disabled]="!registerForm.valid || registerFormIsLoading()"
+              (click)="submitRegister()"
+            >
               @if (registerFormIsLoading()) {
                 <mat-spinner diameter="20"></mat-spinner>
                 <span>Loading...</span>
