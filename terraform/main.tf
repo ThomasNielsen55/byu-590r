@@ -123,8 +123,8 @@ sudo chown -R ubuntu:ubuntu /var/www/html/api
 # Create database and user
 sudo mysql -u root << 'MYSQL_EOF'
 CREATE DATABASE IF NOT EXISTS app_app;
-CREATE USER IF NOT EXISTS 'app_username'@'localhost' IDENTIFIED BY 'app_password';
-GRANT ALL PRIVILEGES ON app_app.* TO 'app_username'@'localhost';
+CREATE USER IF NOT EXISTS 'app_user'@'localhost' IDENTIFIED BY 'app_password';
+GRANT ALL PRIVILEGES ON app_app.* TO 'app_user'@'localhost';
 FLUSH PRIVILEGES;
 MYSQL_EOF
 
