@@ -218,12 +218,14 @@
     }
   }
 
-  // Primary login button - gradient glow
+  // Primary login button - gradient glow, white text, darker on hover
   button[color="primary"] {
     background: linear-gradient(135deg, colors.$colors-primary, colors.$colors-primary-dark) !important;
+    color: colors.$colors-white !important;
     box-shadow: 0 4px 15px rgba(25, 118, 210, 0.3);
 
     &:hover:not(:disabled) {
+      background: linear-gradient(135deg, #115293, #0d47a1) !important;
       box-shadow: 0 8px 25px rgba(25, 118, 210, 0.5);
     }
   }

@@ -75,7 +75,6 @@
               (click)="submitLogin()"
             >
               @if (isLoading()) {
-                <mat-spinner diameter="20"></mat-spinner>
                 <span>Loading...</span>
               } @else {
                 <span>Login Here</span>
@@ -105,7 +104,6 @@
               (click)="submitForgotPassword()"
             >
               @if (submitForgotPasswordLoading()) {
-                <mat-spinner diameter="20"></mat-spinner>
                 <span>Loading...</span>
               } @else {
                 <span>Submit</span>
@@ -153,7 +151,6 @@
               (click)="submitRegister()"
             >
               @if (registerFormIsLoading()) {
-                <mat-spinner diameter="20"></mat-spinner>
                 <span>Loading...</span>
               } @else {
                 <span>Save</span>

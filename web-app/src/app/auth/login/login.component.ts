@@ -14,7 +14,6 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
-import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 
 @Component({
@@ -28,7 +27,6 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
     MatInputModule,
     MatButtonModule,
     MatIconModule,
-    MatProgressSpinnerModule,
     MatSnackBarModule,
   ],
   templateUrl: './login.component.html',
@@ -72,7 +70,7 @@ export class LoginComponent {
         password: ['', [Validators.required, Validators.minLength(8)]],
         c_password: ['', [Validators.required]],
       },
-      { validators: this.passwordMatchValidator }
+      { validators: this.passwordMatchValidator },
     );
 
     this.forgotPasswordForm = this.fb.group({
@@ -105,14 +103,17 @@ export class LoginComponent {
       next: (response) => {
         if (response.results.token) {
           this.authStore.login(response.results);
+          this.snackBar.open('Login successful!', 'Close', {
+            duration: 3000,
+            horizontalPosition: 'center',
+            verticalPosition: 'top',
+          });
           this.router.navigate(['/home']);
         }
         this.isLoading.set(false);
       },
-      error: (error) => {
-        this.errorMsg.set(
-          error?.error?.message || error?.message || 'Login failed'
-        );
+      error: () => {
+        this.errorMsg.set('Login Failed! Can not Authenticate!');
         this.isLoading.set(false);
       },
     });
@@ -135,7 +136,7 @@ export class LoginComponent {
               duration: 5000,
               horizontalPosition: 'center',
               verticalPosition: 'top',
-            }
+            },
           );
           this.submitForgotPasswordLoading.set(false);
           this.view.set('login');
