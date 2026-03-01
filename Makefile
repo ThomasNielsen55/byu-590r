@@ -92,8 +92,8 @@ stop:
 	docker stop byu-590r-frontend || true
 	docker rm byu-590r-frontend || true
 	@echo "Stopping Angular dev server..."
-	pkill -f "ng serve" || true
-	pkill -f "npm start" || true
+	-pkill -f "ng serve"
+	-pkill -f "npm start"
 	@echo "All services stopped!"
 
 # Clean up everything
