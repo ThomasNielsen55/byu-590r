@@ -1,4 +1,4 @@
-<div class="login-page-content" [class.view-register]="view() === 'register'">
+<div class="login-page-content" [class.view-register]="view() === 'register' || view() === 'forgot-password'">
   <div class="auth-wrapper">
     <nav class="auth-nav">
       <button
@@ -118,29 +118,59 @@
           <mat-card-content>
             <form [formGroup]="registerForm">
               <mat-form-field appearance="outline" class="full-width">
-                <mat-label>Full name</mat-label>
-                <input matInput type="text" formControlName="name" />
+                <mat-label>First Name</mat-label>
+                <input matInput type="text" formControlName="first_name" />
+                @if (
+                  registerForm.get("first_name")?.invalid &&
+                  registerForm.get("first_name")?.touched
+                ) {
+                  <mat-error>First name is required</mat-error>
+                }
+              </mat-form-field>
+              <mat-form-field appearance="outline" class="full-width">
+                <mat-label>Last Name</mat-label>
+                <input matInput type="text" formControlName="last_name" />
+                @if (
+                  registerForm.get("last_name")?.invalid &&
+                  registerForm.get("last_name")?.touched
+                ) {
+                  <mat-error>Last name is required</mat-error>
+                }
               </mat-form-field>
               <mat-form-field appearance="outline" class="full-width">
                 <mat-label>Email</mat-label>
                 <input matInput type="email" formControlName="email" />
+                @if (
+                  registerForm.get("email")?.invalid &&
+                  registerForm.get("email")?.touched
+                ) {
+                  <mat-error>Email is required and must be valid</mat-error>
+                }
               </mat-form-field>
               <mat-form-field appearance="outline" class="full-width">
                 <mat-label>Password</mat-label>
                 <input matInput type="password" formControlName="password" />
+                @if (
+                  registerForm.get("password")?.invalid &&
+                  registerForm.get("password")?.touched
+                ) {
+                  <mat-error
+                    >Password is required and must be at least 8
+                    characters</mat-error
+                  >
+                }
               </mat-form-field>
               <mat-form-field appearance="outline" class="full-width">
-                <mat-label>Password Confirmation</mat-label>
-                <input matInput type="password" formControlName="c_password" />
+                <mat-label>Confirm Password</mat-label>
+                <input matInput type="password" formControlName="password_confirm" />
                 @if (
-                  registerForm.get("c_password")?.hasError("passwordMismatch")
+                  registerForm.get("password_confirm")?.hasError("passwordMismatch")
                 ) {
                   <mat-error
                     >The password confirmation does not match.</mat-error
                   >
                 }
               </mat-form-field>
-              <small>Required fields</small>
             </form>
           </mat-card-content>
           <mat-card-actions class="button-group">
@@ -153,7 +183,7 @@
               @if (registerFormIsLoading()) {
                 <span>Loading...</span>
               } @else {
-                <span>Save</span>
+                <span>Register</span>
               }
             </button>
           </mat-card-actions>

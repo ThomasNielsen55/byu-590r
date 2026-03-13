@@ -22,8 +22,8 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> logout() async {
     await _apiClient.logout(widget.accesstoken);
     if (mounted) {
-      Navigator.pushReplacement(
-          context, MaterialPageRoute(builder: (context) => const LoginScreen()));
+      Navigator.pushReplacement(context,
+          MaterialPageRoute(builder: (context) => const LoginScreen()));
     }
   }
 
@@ -54,10 +54,11 @@ class _HomeScreenState extends State<HomeScreen> {
                 String name = snapshot.data!['results']['name'];
                 String email = snapshot.data!['results']['email'];
                 String avatar = snapshot.data!['results']?['avatar'] ?? '';
-                
+
                 Widget myImage = const Icon(Icons.person, size: 100);
-                if (avatar != "" && avatar != null) {
-                  myImage = Image.network(avatar, fit: BoxFit.cover, errorBuilder: (context, error, stackTrace) {
+                if (avatar != "") {
+                  myImage = Image.network(avatar, fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) {
                     return const Icon(Icons.person, size: 100);
                   });
                 }
@@ -204,4 +205,3 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 }
-

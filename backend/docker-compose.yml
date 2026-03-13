@@ -6,6 +6,8 @@ services:
         working_dir: /var/www
         volumes:
             - .:/var/www
+            # Named volume so the container can chmod bootstrap/cache (fixes "chmod(): Operation not permitted" on Windows/WSL)
+            - laravel_bootstrap_cache:/var/www/bootstrap/cache
         networks:
             - app_network
         depends_on:
@@ -51,6 +53,7 @@ services:
 
 volumes:
     mysql_data:
+    laravel_bootstrap_cache:
 
 networks:
     app_network:

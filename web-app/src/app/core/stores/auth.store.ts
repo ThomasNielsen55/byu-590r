@@ -40,11 +40,21 @@ export const AuthStore = signalStore(
         user,
       });
     },
+    /** Calls API to invalidate token, then clears user from localStorage and patchState. */
     logout(): void {
-      authService.logout();
-      patchState(store, {
-        loggedIn: false,
-        user: null,
+      authService.logout().subscribe({
+        next: () => {
+          patchState(store, {
+            loggedIn: false,
+            user: null,
+          });
+        },
+        error: () => {
+          patchState(store, {
+            loggedIn: false,
+            user: null,
+          });
+        },
       });
     },
     updateAvatar(avatar: string | null): void {

@@ -18,15 +18,15 @@ class UsersSeeder extends Seeder
     {
        
         $userData = [
-            'name' => 'Test User',
-            'email' => 'testuser@test.com',
+            'name' => 'Thomas Test User',
+            'email' => 'thomastestuser@test.com',
             'email_verified_at' => Carbon::now(),
             'avatar' => null,
             'password' => bcrypt('password12345'),
         ];
         
         User::updateOrCreate(
-            ['email' => 'testuser@test.com'],
+            ['email' => 'thomastestuser@test.com'],
             $userData
         );
         

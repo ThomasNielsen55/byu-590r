@@ -62,15 +62,16 @@ export class LoginComponent {
 
     this.registerForm = this.fb.group(
       {
-        name: ['', [Validators.required, Validators.minLength(3)]],
+        first_name: ['', [Validators.required, Validators.minLength(1)]],
+        last_name: ['', [Validators.required, Validators.minLength(1)]],
         email: [
           '',
           [Validators.required, Validators.minLength(3), Validators.email],
         ],
         password: ['', [Validators.required, Validators.minLength(8)]],
-        c_password: ['', [Validators.required]],
+        password_confirm: ['', [Validators.required]],
       },
-      { validators: this.passwordMatchValidator },
+      { validators: this.passwordMatchValidator }
     );
 
     this.forgotPasswordForm = this.fb.group({
@@ -83,11 +84,15 @@ export class LoginComponent {
 
   passwordMatchValidator(form: FormGroup) {
     const password = form.get('password');
-    const cPassword = form.get('c_password');
-    if (password && cPassword && password.value !== cPassword.value) {
-      cPassword.setErrors({ passwordMismatch: true });
+    const cPassword = form.get('password_confirm');
+    if (!password || !cPassword) return null;
+    if (password.value !== cPassword.value) {
+      cPassword.setErrors({ ...cPassword.errors, passwordMismatch: true });
       return { passwordMismatch: true };
     }
+    const err = { ...cPassword.errors };
+    delete (err as Record<string, unknown>)['passwordMismatch'];
+    cPassword.setErrors(Object.keys(err).length ? err : null);
     return null;
   }
 
@@ -155,8 +160,8 @@ export class LoginComponent {
     this.registerFormIsLoading.set(true);
     this.authService.register(this.registerForm.value).subscribe({
       next: () => {
-        this.snackBar.open('Success! Registration complete.', 'Close', {
-          duration: 5000,
+        this.snackBar.open('Registration complete. You can now log in.', 'Close', {
+          duration: 4000,
           horizontalPosition: 'center',
           verticalPosition: 'top',
         });
@@ -164,7 +169,7 @@ export class LoginComponent {
         this.view.set('login');
       },
       error: () => {
-        this.snackBar.open('Error! Registration failed.', 'Close', {
+        this.snackBar.open('Registration failed. Please try again.', 'Close', {
           duration: 5000,
           horizontalPosition: 'center',
           verticalPosition: 'top',

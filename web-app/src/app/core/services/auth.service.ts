@@ -1,6 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
+import { tap } from 'rxjs/operators';
 import { environment } from '../../../environments/environment';
 
 export interface LoginRequest {
@@ -9,10 +10,11 @@ export interface LoginRequest {
 }
 
 export interface RegisterRequest {
-  name: string;
+  first_name: string;
+  last_name: string;
   email: string;
   password: string;
-  c_password: string;
+  password_confirm: string;
 }
 
 export interface AuthResponse {
@@ -38,12 +40,24 @@ export class AuthService {
     );
   }
 
-  logout(): void {
+  /** Calls POST /api/logout with bearer token, then clears user from localStorage. */
+  logout(): Observable<unknown> {
+    const user = this.getStoredUser();
+    const token = user?.token;
+    const headers: Record<string, string> = token
+      ? { Authorization: `Bearer ${token}` }
+      : {};
+    return this.http
+      .post<unknown>(`${this.apiUrl}logout`, {}, { headers })
+      .pipe(tap(() => this.clearUser()));
+  }
+
+  clearUser(): void {
     localStorage.removeItem('user');
   }
 
-  register(user: RegisterRequest): Observable<any> {
-    return this.http.post(`${this.apiUrl}register`, user);
+  register(user: RegisterRequest): Observable<unknown> {
+    return this.http.post<unknown>(`${this.apiUrl}register`, user);
   }
 
   forgotPassword(email: string): Observable<any> {

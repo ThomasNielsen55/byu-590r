@@ -18,19 +18,23 @@ class RegisterController extends BaseController
     public function register(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'name' => 'required|min:1',
+            'first_name' => 'required|string|min:1',
+            'last_name' => 'required|string|min:1',
             'email' => 'required|email|unique:users,email|min:3',
             'password' => 'required|min:8',
-            'c_password' => 'required|same:password|min:8',
+            'password_confirm' => 'required|same:password|min:8',
         ]);
 
         if ($validator->fails()) {
             return $this->sendError('Validation Error.', $validator->errors());
         }
 
-        $input = $request->all();
-        $input['password'] = bcrypt($input['password']);
-        $user = User::create($input);
+        $name = trim($request->first_name . ' ' . $request->last_name);
+        $user = User::create([
+            'name' => $name,
+            'email' => $request->email,
+            'password' => bcrypt($request->password),
+        ]);
         $token = $user->createToken('MyApp');
         $success['token'] = $token->plainTextToken;
         $success['name'] = $user->name;
