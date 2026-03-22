@@ -56,6 +56,7 @@ export class AppComponent implements OnInit {
   theme = signal<'light' | 'dark'>('dark');
   profileDialog = signal(false);
   profileIsUploading = signal(false);
+  selectedAvatarFile = signal<File | null>(null);
   verificationEmailLoading = signal(false);
   showEmailNotVerifiedDialog = signal(false);
   showChangeEmailTextField = signal(false);
@@ -148,14 +149,20 @@ export class AppComponent implements OnInit {
     });
   }
 
-  onAvatarChange(event: Event): void {
+  onAvatarFileSelected(event: Event): void {
     const input = event.target as HTMLInputElement;
     if (!input.files || input.files.length === 0) return;
+    this.selectedAvatarFile.set(input.files[0]);
+  }
 
+  addOrReplaceAvatar(): void {
+    const image = this.selectedAvatarFile();
+    if (!image) return;
     this.profileIsUploading.set(true);
-    this.userService.uploadAvatar(input.files[0]).subscribe({
+    this.userStore.addOrReplaceAvatar(image).subscribe({
       next: (response) => {
         this.authStore.updateAvatar(response.results.avatar);
+        this.selectedAvatarFile.set(null);
         this.profileIsUploading.set(false);
       },
       error: () => {
@@ -172,9 +179,10 @@ export class AppComponent implements OnInit {
 
   removeAvatar(): void {
     this.profileIsUploading.set(true);
-    this.userService.removeAvatar().subscribe({
-      next: (response) => {
+    this.userStore.removeAvatar().subscribe({
+      next: () => {
         this.authStore.updateAvatar(null);
+        this.selectedAvatarFile.set(null);
         this.profileIsUploading.set(false);
       },
       error: () => {

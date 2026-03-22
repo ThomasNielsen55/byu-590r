@@ -52,6 +52,25 @@ class BaseController extends Controller
             if (Storage::disk('public')->exists($path)) {
                 return asset('storage/' . $path);
             }
+            // Profile avatars are stored on S3 even when FILESYSTEM_DISK=local; resolve URL from S3.
+            if ($this->s3IsConfigured()) {
+                $url = $this->resolveS3Url($path, $minutes);
+                if ($url !== null) {
+                    return $url;
+                }
+            }
+            return null;
+        }
+
+        return $this->resolveS3Url($path, $minutes);
+    }
+
+    /**
+     * Build a public or temporary URL for a path on the S3 disk.
+     */
+    protected function resolveS3Url(string $path, $minutes = 10): ?string
+    {
+        if (! $this->s3IsConfigured()) {
             return null;
         }
 
@@ -60,7 +79,7 @@ class BaseController extends Controller
         try {
             if ($s3->exists($path)) {
                 if ($minutes === null) {
-                    $s3->setVisibility($path, "public");
+                    $s3->setVisibility($path, 'public');
                     // @phpstan-ignore-next-line - url() method exists on S3 adapter at runtime
                     return $s3->url($path);
                 }
@@ -69,10 +88,19 @@ class BaseController extends Controller
             }
         } catch (\Exception $e) {
             Log::error('S3 URL generation failed: ' . $e->getMessage());
+
             return null;
         }
 
         return null;
+    }
+
+    protected function s3IsConfigured(): bool
+    {
+        $key = config('filesystems.disks.s3.key');
+        $bucket = config('filesystems.disks.s3.bucket');
+
+        return ! empty($key) && ! empty($bucket);
     }
 
     /**

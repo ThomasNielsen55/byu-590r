@@ -9,6 +9,9 @@
     <div class="nav-buttons">
       <a mat-button routerLink="/home" routerLinkActive="active">Home</a>
       <a mat-button routerLink="/books" routerLinkActive="active">Books</a>
+      <a mat-button routerLink="/embroidery" routerLinkActive="active"
+        >Embroidery</a
+      >
     </div>
 
     <button
@@ -75,25 +78,35 @@
             }
           </div>
           <div class="file-input-container">
+            <input
+              #avatarInput
+              type="file"
+              accept="image/*"
+              (change)="onAvatarFileSelected($event)"
+              [disabled]="profileIsUploading()"
+              class="file-input"
+            />
+            <button
+              mat-stroked-button
+              color="primary"
+              (click)="avatarInput.click()"
+              [disabled]="profileIsUploading()"
+            >
+              Choose Image
+            </button>
             <button
               mat-raised-button
               color="primary"
-              [disabled]="profileIsUploading()"
+              (click)="addOrReplaceAvatar()"
+              [disabled]="profileIsUploading() || !selectedAvatarFile()"
             >
-              <input
-                type="file"
-                accept="image/*"
-                (change)="onAvatarChange($event)"
-                [disabled]="profileIsUploading()"
-                class="file-input"
-              />
               @if (profileIsUploading()) {
               <ng-container>
                 <mat-spinner diameter="20"></mat-spinner>
                 <span>Uploading...</span>
               </ng-container>
               } @else {
-              <span>Profile picture change</span>
+              <span>Add / Replace Profile Picture</span>
               }
             </button>
           </div>
@@ -104,7 +117,14 @@
             (click)="removeAvatar()"
             [disabled]="profileIsUploading() || !avatarURL"
           >
-            Remove Profile Picture
+            @if (profileIsUploading()) {
+            <ng-container>
+              <mat-spinner diameter="20"></mat-spinner>
+              <span>Removing...</span>
+            </ng-container>
+            } @else {
+            <span>Remove Profile Picture</span>
+            }
           </button>
         </div>
       </div>

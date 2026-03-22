@@ -1,6 +1,7 @@
-import { computed } from '@angular/core';
+import { computed, inject } from '@angular/core';
 import { signalStore, withState, withComputed, withMethods, patchState } from '@ngrx/signals';
-import { User } from '../services/user.service';
+import { User, UserService } from '../services/user.service';
+import { Observable, tap } from 'rxjs';
 
 export interface UserState {
   user: User | null;
@@ -32,6 +33,49 @@ export const UserStore = signalStore(
           },
         });
       }
+    },
+    setAvatar(avatar: string | null): void {
+      const currentUser = store.user();
+      if (currentUser) {
+        patchState(store, {
+          user: {
+            ...currentUser,
+            avatar,
+          },
+        });
+      }
+    },
+  })),
+  withMethods((store, userService = inject(UserService)) => ({
+    addOrReplaceAvatar(image: File): Observable<{ success: boolean; results: { avatar: string }; message: string }> {
+      return userService.uploadAvatar(image).pipe(
+        tap((response) => {
+          const currentUser = store.user();
+          if (currentUser) {
+            patchState(store, {
+              user: {
+                ...currentUser,
+                avatar: response.results.avatar,
+              },
+            });
+          }
+        })
+      );
+    },
+    removeAvatar(): Observable<{ success: boolean; results: { avatar: null }; message: string }> {
+      return userService.removeAvatar().pipe(
+        tap(() => {
+          const currentUser = store.user();
+          if (currentUser) {
+            patchState(store, {
+              user: {
+                ...currentUser,
+                avatar: null,
+              },
+            });
+          }
+        })
+      );
     },
   }))
 );

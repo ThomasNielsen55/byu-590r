@@ -147,17 +147,15 @@
 
 .file-input-container {
   width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: spacing.$spacing-small;
 
   .file-input {
-    position: absolute;
-    opacity: 0;
-    width: 100%;
-    height: 100%;
-    cursor: pointer;
+    display: none;
   }
 
   button {
-    position: relative;
     width: 100%;
   }
 }

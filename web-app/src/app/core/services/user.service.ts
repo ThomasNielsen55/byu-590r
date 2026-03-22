@@ -58,7 +58,7 @@ export class UserService {
       success: boolean;
       results: { avatar: string };
       message: string;
-    }>(`${this.apiUrl}user/upload_avatar`, formData, {
+    }>(`${this.apiUrl}user/addAvatar`, formData, {
       headers: this.getMultipartAuthHeaders(),
     });
   }
@@ -72,7 +72,7 @@ export class UserService {
       success: boolean;
       results: { avatar: null };
       message: string;
-    }>(`${this.apiUrl}user/remove_avatar`, { headers: this.getAuthHeaders() });
+    }>(`${this.apiUrl}user/removeAvatar`, { headers: this.getAuthHeaders() });
   }
 
   sendVerificationEmail(emailData: any): Observable<any> {

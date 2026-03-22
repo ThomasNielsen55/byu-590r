@@ -20,5 +20,13 @@ export const routes: Routes = [
       import('./books/books.component').then((m) => m.BooksComponent),
     canActivate: [authGuard],
   },
+  {
+    path: 'embroidery',
+    loadComponent: () =>
+      import('./embroidery/embroidery.component').then(
+        (m) => m.EmbroideryComponent
+      ),
+    canActivate: [authGuard],
+  },
   { path: '**', redirectTo: '/login' },
 ];
