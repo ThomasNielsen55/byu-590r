@@ -1,67 +1,13 @@
 <div class="embroidery-page">
-  <mat-card class="embroidery-card add-card">
-    <mat-card-header>
-      <mat-card-title>Add embroidery</mat-card-title>
-      <mat-card-subtitle
-        >Name, description, and a cover image (uploaded to storage).</mat-card-subtitle
-      >
-    </mat-card-header>
-    <mat-card-content>
-      <form [formGroup]="createForm" (ngSubmit)="submitCreate()" class="create-form">
-        <mat-form-field appearance="outline" class="full-width">
-          <mat-label>Name</mat-label>
-          <input matInput formControlName="name" autocomplete="off" />
-          @if (createForm.get('name')?.invalid && createForm.get('name')?.touched) {
-          <mat-error>Name is required</mat-error>
-          }
-        </mat-form-field>
-
-        <mat-form-field appearance="outline" class="full-width">
-          <mat-label>Description</mat-label>
-          <textarea matInput formControlName="description" rows="3"></textarea>
-          @if (createForm.get('description')?.invalid && createForm.get('description')?.touched) {
-          <mat-error>Description is required</mat-error>
-          }
-        </mat-form-field>
-
-        <div class="file-row">
-          <label class="file-label">Cover image</label>
-          <input
-            type="file"
-            accept="image/*"
-            (change)="onCoverSelected($event)"
-          />
-          @if (selectedFile(); as f) {
-          <span class="file-name">{{ f.name }}</span>
-          }
-        </div>
-
-        @if (createError()) {
-        <p class="form-error">{{ createError() }}</p>
-        }
-
-        <div class="form-actions">
-          <button
-            mat-raised-button
-            color="primary"
-            type="submit"
-            [disabled]="isSubmitting()"
-          >
-            @if (isSubmitting()) {
-            Saving…
-            } @else {
-            Save embroidery
-            }
-          </button>
-        </div>
-      </form>
-    </mat-card-content>
-  </mat-card>
-
   <mat-card class="embroidery-card">
-    <mat-card-header>
-      <mat-card-title>Embroidery &amp; sewing projects</mat-card-title>
-      <mat-card-subtitle>Display list</mat-card-subtitle>
+    <mat-card-header class="list-header">
+      <div class="header-left">
+        <mat-card-title>Embroidery &amp; sewing projects</mat-card-title>
+        <mat-card-subtitle>Display list</mat-card-subtitle>
+      </div>
+      <button mat-raised-button color="primary" type="button" (click)="openAddDialog()">
+        Add embroidery
+      </button>
     </mat-card-header>
     <mat-card-content>
       <table class="embroidery-table">
@@ -70,10 +16,11 @@
             <th scope="col">Cover</th>
             <th scope="col">Name</th>
             <th scope="col">Description</th>
+            <th scope="col" class="actions-col">Actions</th>
           </tr>
         </thead>
         <tbody>
-          @for (item of embroideries(); track item.id) {
+          @for (item of embroidery(); track item.id) {
           <tr>
             <td class="cover-cell">
               @if (item.embroidery_picture) {
@@ -90,6 +37,26 @@
             </td>
             <td>{{ item.name }}</td>
             <td>{{ item.description }}</td>
+            <td class="actions-cell">
+              <button
+                mat-icon-button
+                type="button"
+                color="primary"
+                (click)="openEditDialog(item)"
+                aria-label="Edit embroidery"
+              >
+                <mat-icon>edit</mat-icon>
+              </button>
+              <button
+                mat-icon-button
+                type="button"
+                color="warn"
+                (click)="openDeleteDialog(item)"
+                aria-label="Delete embroidery"
+              >
+                <mat-icon>delete</mat-icon>
+              </button>
+            </td>
           </tr>
           }
         </tbody>
@@ -97,3 +64,186 @@
     </mat-card-content>
   </mat-card>
 </div>
+
+<ng-template #addDialogTpl>
+  <h2 mat-dialog-title>Add embroidery</h2>
+
+  <mat-dialog-content>
+    <form
+      [formGroup]="createForm"
+      (ngSubmit)="submitCreate()"
+      class="create-form"
+    >
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Name</mat-label>
+        <input matInput formControlName="name" autocomplete="off" />
+        @if (createForm.get('name')?.invalid && createForm.get('name')?.touched) {
+        <mat-error>Name is required</mat-error>
+        }
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Description</mat-label>
+        <textarea matInput formControlName="description" rows="3"></textarea>
+        @if (createForm.get('description')?.invalid && createForm.get('description')?.touched) {
+        <mat-error>Description is required</mat-error>
+        }
+      </mat-form-field>
+
+      <div class="ai-template-block">
+        <button
+          mat-stroked-button
+          type="button"
+          color="primary"
+          (click)="generateAiTemplate()"
+          [disabled]="isAiGenerating()"
+        >
+          @if (isAiGenerating()) {
+          <mat-spinner class="ai-btn-spinner" diameter="20" />
+          } @else {
+          <mat-icon>auto_awesome</mat-icon>
+          }
+          <span class="ai-btn-label">Generate AI template cover</span>
+        </button>
+        <p class="ai-hint">
+          Uses OpenAI DALL·E with your name and description above. The image is saved to your bucket
+          and attached as the cover file — you can still pick a different file below.
+        </p>
+        @if (aiPreviewUrl(); as preview) {
+        <div class="ai-preview">
+          <img [src]="preview" alt="AI generated template preview" />
+        </div>
+        }
+      </div>
+
+      <div class="file-row">
+        <label class="file-label" for="create-cover-input">Cover image (required)</label>
+        <input
+          id="create-cover-input"
+          type="file"
+          accept="image/*"
+          (change)="onCoverSelected($event)"
+        />
+        @if (selectedFile(); as f) {
+        <span class="file-name">{{ f.name }}</span>
+        }
+      </div>
+
+      @if (createError()) {
+      <p class="form-error">{{ createError() }}</p>
+      }
+
+      <div class="form-actions">
+        <button mat-button type="button" (click)="dialogRef?.close()">
+          Cancel
+        </button>
+        <button
+          mat-raised-button
+          color="primary"
+          type="submit"
+          [disabled]="isSubmitting() || isAiGenerating()"
+        >
+          @if (isSubmitting()) {
+          Saving…
+          } @else {
+          Save embroidery
+          }
+        </button>
+      </div>
+    </form>
+  </mat-dialog-content>
+</ng-template>
+
+<ng-template #editDialogTpl>
+  <h2 mat-dialog-title>Edit embroidery</h2>
+
+  <mat-dialog-content>
+    <form
+      [formGroup]="editForm"
+      (ngSubmit)="submitEdit()"
+      class="create-form"
+    >
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Name</mat-label>
+        <input matInput formControlName="name" autocomplete="off" />
+        @if (editForm.get('name')?.invalid && editForm.get('name')?.touched) {
+        <mat-error>Name is required</mat-error>
+        }
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Description</mat-label>
+        <textarea matInput formControlName="description" rows="3"></textarea>
+        @if (editForm.get('description')?.invalid && editForm.get('description')?.touched) {
+        <mat-error>Description is required</mat-error>
+        }
+      </mat-form-field>
+
+      <div class="file-row">
+        <label class="file-label" for="edit-cover-input"
+          >New cover image (optional — overrides S3 image)</label
+        >
+        <input
+          id="edit-cover-input"
+          type="file"
+          accept="image/*"
+          (change)="onEditCoverSelected($event)"
+        />
+        @if (editSelectedFile(); as f) {
+        <span class="file-name">{{ f.name }}</span>
+        }
+      </div>
+
+      @if (editError()) {
+      <p class="form-error">{{ editError() }}</p>
+      }
+
+      <div class="form-actions">
+        <button mat-button type="button" (click)="editDialogRef?.close()">
+          Cancel
+        </button>
+        <button
+          mat-raised-button
+          color="primary"
+          type="submit"
+          [disabled]="isEditSubmitting()"
+        >
+          @if (isEditSubmitting()) {
+          Saving…
+          } @else {
+          Save changes
+          }
+        </button>
+      </div>
+    </form>
+  </mat-dialog-content>
+</ng-template>
+
+<ng-template #deleteDialogTpl>
+  <h2 mat-dialog-title>Delete embroidery?</h2>
+  <mat-dialog-content>
+    <p class="delete-prompt">
+      Are you sure you want to delete
+      <strong>{{ pendingDelete()?.name }}</strong
+      >? This cannot be undone and will remove the cover image from storage.
+    </p>
+  </mat-dialog-content>
+  <mat-dialog-actions align="end">
+    <button mat-button type="button" (click)="cancelDelete()" [disabled]="isDeleteSubmitting()">
+      Cancel
+    </button>
+    <button
+      mat-raised-button
+      color="warn"
+      type="button"
+      (click)="confirmDelete()"
+      [disabled]="isDeleteSubmitting()"
+    >
+      @if (isDeleteSubmitting()) {
+      Deleting…
+      } @else {
+      Delete
+      }
+    </button>
+  </mat-dialog-actions>
+</ng-template>

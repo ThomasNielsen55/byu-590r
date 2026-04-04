@@ -19,7 +19,7 @@ export class EmbroideryService {
   private authService = inject(AuthService);
   private apiUrl = environment.apiUrl;
 
-  private getAuthHeaders(): { [key: string]: string } {
+  private getAuthHeaders(): Record<string, string> {
     const user = this.authService.getStoredUser();
     if (user && user.token) {
       return { Authorization: `Bearer ${user.token}` };
@@ -27,7 +27,7 @@ export class EmbroideryService {
     return {};
   }
 
-  private getMultipartAuthHeaders(): { [key: string]: string } {
+  private getMultipartAuthHeaders(): Record<string, string> {
     const user = this.authService.getStoredUser();
     if (user && user.token) {
       return { Authorization: `Bearer ${user.token}` };
@@ -66,6 +66,74 @@ export class EmbroideryService {
     }>(`${this.apiUrl}embroideries`, formData, {
       headers: this.getMultipartAuthHeaders(),
     });
+  }
+
+  /**
+   * Updates name/description and optionally replaces the cover image (multipart POST).
+   */
+  updateEmbroidery(
+    id: number,
+    payload: { name: string; description: string },
+    file?: File | null
+  ): Observable<{
+    success: boolean;
+    results: { embroidery: Embroidery };
+    message: string;
+  }> {
+    const formData = new FormData();
+    formData.append('name', payload.name);
+    formData.append('description', payload.description);
+    if (file) {
+      formData.append('file', file);
+    }
+    return this.http.post<{
+      success: boolean;
+      results: { embroidery: Embroidery };
+      message: string;
+    }>(`${this.apiUrl}embroideries/${id}`, formData, {
+      headers: this.getMultipartAuthHeaders(),
+    });
+  }
+
+  /**
+   * OpenAI DALL·E: generates a template image from title + description, stores on S3, returns URL + base64.
+   */
+  generateTemplateImage(payload: {
+    title: string;
+    description: string;
+  }): Observable<{
+    success: boolean;
+    results: {
+      image_url: string | null;
+      preview_base64: string;
+    };
+    message: string;
+  }> {
+    return this.http.post<{
+      success: boolean;
+      results: {
+        image_url: string | null;
+        preview_base64: string;
+      };
+      message: string;
+    }>(`${this.apiUrl}embroideries/generate-template`, payload, {
+      headers: {
+        ...this.getAuthHeaders(),
+        'Content-Type': 'application/json',
+      },
+    });
+  }
+
+  deleteEmbroidery(id: number): Observable<{
+    success: boolean;
+    results: { id: number };
+    message: string;
+  }> {
+    return this.http.delete<{
+      success: boolean;
+      results: { id: number };
+      message: string;
+    }>(`${this.apiUrl}embroideries/${id}`, { headers: this.getAuthHeaders() });
   }
 
   updateEmbroideryPicture(

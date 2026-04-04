@@ -36,7 +36,10 @@ Route::middleware(\App\Http\Middleware\AuthenticateApi::class)->group(function (
     });
 
     Route::resource('books', BookController::class);
-    Route::resource('embroideries', EmbroideryController::class)->only(['index', 'store']);
+    Route::post('embroideries/generate-template', [EmbroideryController::class, 'generateTemplate']);
+    // Multipart update uses POST (PHP does not reliably parse multipart bodies on PUT).
+    Route::post('embroideries/{embroidery}', [EmbroideryController::class, 'update']);
+    Route::resource('embroideries', EmbroideryController::class)->only(['index', 'store', 'destroy']);
     Route::controller(EmbroideryController::class)->group(function () {
         Route::post('embroideries/{id}/update_embroidery_picture', 'updateEmbroideryPicture');
     });

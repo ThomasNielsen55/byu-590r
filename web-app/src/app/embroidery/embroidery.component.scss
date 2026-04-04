@@ -11,10 +11,23 @@
   width: 100%;
 }
 
-.add-card .create-form {
+.create-form {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+}
+
+.list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 1rem;
+}
+
+.header-left {
+  display: flex;
+  flex-direction: column;
 }
 
 .full-width {
@@ -46,6 +59,9 @@
 
 .form-actions {
   margin-top: 0.25rem;
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
 }
 
 .embroidery-table {
@@ -95,4 +111,67 @@
   width: 48px;
   height: 48px;
   opacity: 0.5;
+}
+
+.actions-col {
+  width: 120px;
+  text-align: right;
+}
+
+.actions-cell {
+  white-space: nowrap;
+  text-align: right;
+}
+
+.delete-prompt {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.ai-template-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+  padding: 0.75rem;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.03);
+}
+
+.ai-template-block button[type='button'] {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.ai-btn-spinner {
+  display: inline-block;
+}
+
+.ai-btn-label {
+  vertical-align: middle;
+}
+
+.ai-hint {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: rgba(0, 0, 0, 0.6);
+  line-height: 1.4;
+  max-width: 36rem;
+}
+
+.ai-preview {
+  margin-top: 0.25rem;
+}
+
+.ai-preview img {
+  display: block;
+  max-width: 100%;
+  max-height: 280px;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  border-radius: 4px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
 }

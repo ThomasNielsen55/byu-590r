@@ -9,7 +9,9 @@ use Illuminate\Database\Seeder;
 class EmbroiderySeeder extends Seeder
 {
     /**
-     * Seed five favorite embroidery / sewing projects with local or S3 image paths.
+     * Seed five demo embroidery rows when missing. Uses firstOrCreate so re-seeding
+     * (e.g. make start) does not overwrite name/description/embroidery_picture for rows
+     * that already exist — only inserts records that are not present yet.
      */
     public function run(): void
     {
@@ -42,7 +44,7 @@ class EmbroiderySeeder extends Seeder
         ];
 
         foreach ($rows as $row) {
-            Embroidery::updateOrCreate(
+            Embroidery::firstOrCreate(
                 ['name' => $row['name']],
                 array_merge($row, [
                     'created_at' => Carbon::now(),
