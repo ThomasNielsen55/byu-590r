@@ -2,4 +2,5 @@
 export const environment = {
   production: true,
   apiUrl: 'http://__EC2_HOST__:4444/api/',
+  idleLogoutMinutes: 15,
 };

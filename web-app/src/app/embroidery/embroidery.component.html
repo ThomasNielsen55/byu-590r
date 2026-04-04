@@ -16,6 +16,7 @@
             <th scope="col">Cover</th>
             <th scope="col">Name</th>
             <th scope="col">Description</th>
+            <th scope="col" class="materials-col">Materials</th>
             <th scope="col" class="actions-col">Actions</th>
           </tr>
         </thead>
@@ -37,6 +38,22 @@
             </td>
             <td>{{ item.name }}</td>
             <td>{{ item.description }}</td>
+            <td class="materials-cell">
+              @if (item.materials?.length) {
+              <ul class="material-tags" aria-label="Materials used">
+                @for (mat of item.materials; track mat.id) {
+                <li class="material-tag">
+                  <span class="material-name">{{ mat.name }}</span>
+                  @if (mat.kind) {
+                  <span class="material-kind">{{ mat.kind }}</span>
+                  }
+                </li>
+                }
+              </ul>
+              } @else {
+              <span class="muted">—</span>
+              }
+            </td>
             <td class="actions-cell">
               <button
                 mat-icon-button
@@ -88,6 +105,16 @@
         @if (createForm.get('description')?.invalid && createForm.get('description')?.touched) {
         <mat-error>Description is required</mat-error>
         }
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Materials (optional)</mat-label>
+        <mat-select formControlName="material_ids" multiple>
+          @for (m of materials(); track m.id) {
+          <mat-option [value]="m.id">{{ m.name }}</mat-option>
+          }
+        </mat-select>
+        <mat-hint>Choose any threads, fabric, or notions for this project.</mat-hint>
       </mat-form-field>
 
       <div class="ai-template-block">
@@ -179,6 +206,42 @@
         }
       </mat-form-field>
 
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Materials (optional)</mat-label>
+        <mat-select formControlName="material_ids" multiple>
+          @for (m of materials(); track m.id) {
+          <mat-option [value]="m.id">{{ m.name }}</mat-option>
+          }
+        </mat-select>
+        <mat-hint>Update which materials are linked to this embroidery.</mat-hint>
+      </mat-form-field>
+
+      <div class="ai-template-block">
+        <button
+          mat-stroked-button
+          type="button"
+          color="primary"
+          (click)="generateAiTemplateForEdit()"
+          [disabled]="isEditAiGenerating()"
+        >
+          @if (isEditAiGenerating()) {
+          <mat-spinner class="ai-btn-spinner" diameter="20" />
+          } @else {
+          <mat-icon>auto_awesome</mat-icon>
+          }
+          <span class="ai-btn-label">Generate AI template cover</span>
+        </button>
+        <p class="ai-hint">
+          Uses OpenAI DALL·E with the name and description above. The new image is attached as the
+          cover when you save — you can still choose a different file below.
+        </p>
+        @if (editAiPreviewUrl(); as editPreview) {
+        <div class="ai-preview">
+          <img [src]="editPreview" alt="AI generated template preview" />
+        </div>
+        }
+      </div>
+
       <div class="file-row">
         <label class="file-label" for="edit-cover-input"
           >New cover image (optional — overrides S3 image)</label
@@ -206,7 +269,7 @@
           mat-raised-button
           color="primary"
           type="submit"
-          [disabled]="isEditSubmitting()"
+          [disabled]="isEditSubmitting() || isEditAiGenerating()"
         >
           @if (isEditSubmitting()) {
           Saving…

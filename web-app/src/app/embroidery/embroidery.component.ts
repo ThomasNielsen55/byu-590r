@@ -26,9 +26,11 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { EmbroideryStore } from '../core/stores/embroidery.store';
+import { MatSelectModule } from '@angular/material/select';
 import {
   EmbroideryService,
   Embroidery,
+  Material,
 } from '../core/services/embroidery.service';
 
 @Component({
@@ -45,6 +47,7 @@ import {
     MatInputModule,
     MatSnackBarModule,
     MatProgressSpinnerModule,
+    MatSelectModule,
   ],
   templateUrl: './embroidery.component.html',
   styleUrl: './embroidery.component.scss',
@@ -69,12 +72,16 @@ export class EmbroideryComponent implements OnInit {
   createForm: FormGroup = this.fb.group({
     name: ['', [Validators.required, Validators.maxLength(255)]],
     description: ['', [Validators.required]],
+    material_ids: [[] as number[]],
   });
 
   editForm: FormGroup = this.fb.group({
     name: ['', [Validators.required, Validators.maxLength(255)]],
     description: ['', [Validators.required]],
+    material_ids: [[] as number[]],
   });
+
+  materials = signal<Material[]>([]);
 
   editingId = signal<number | null>(null);
   pendingDelete = signal<Embroidery | null>(null);
@@ -91,8 +98,19 @@ export class EmbroideryComponent implements OnInit {
   isAiGenerating = signal(false);
   aiPreviewUrl = signal<string | null>(null);
 
+  isEditAiGenerating = signal(false);
+  editAiPreviewUrl = signal<string | null>(null);
+
   ngOnInit(): void {
+    this.loadMaterials();
     this.loadEmbroideries();
+  }
+
+  private loadMaterials(): void {
+    this.embroideryService.getMaterials().subscribe({
+      next: (res) => this.materials.set(res.results),
+      error: (err) => console.error('Error loading materials:', err),
+    });
   }
 
   loadEmbroideries(): void {
@@ -104,17 +122,20 @@ export class EmbroideryComponent implements OnInit {
     this.selectedFile.set(null);
     this.aiPreviewUrl.set(null);
     this.isAiGenerating.set(false);
-    this.createForm.reset();
+    this.createForm.reset({ material_ids: [] });
     this.dialogRef = this.dialog.open(this.addDialogTpl, { width: '680px' });
   }
 
   openEditDialog(item: Embroidery): void {
     this.editError.set(null);
     this.editSelectedFile.set(null);
+    this.editAiPreviewUrl.set(null);
+    this.isEditAiGenerating.set(false);
     this.editingId.set(item.id);
     this.editForm.patchValue({
       name: item.name,
       description: item.description,
+      material_ids: item.materials?.map((m) => m.id) ?? [],
     });
     this.editDialogRef = this.dialog.open(this.editDialogTpl, { width: '680px' });
   }
@@ -182,6 +203,52 @@ export class EmbroideryComponent implements OnInit {
       });
   }
 
+  generateAiTemplateForEdit(): void {
+    const name = this.editForm.get('name')?.value?.trim();
+    const desc = this.editForm.get('description')?.value?.trim();
+    if (!name || !desc) {
+      this.editForm.markAllAsTouched();
+      this.editError.set('Enter a name and description first.');
+      return;
+    }
+
+    this.editError.set(null);
+    this.isEditAiGenerating.set(true);
+
+    this.embroideryService
+      .generateTemplateImage({ title: name, description: desc })
+      .subscribe({
+        next: (res) => {
+          const b64 = res.results.preview_base64;
+          const url = res.results.image_url;
+          if (url) {
+            this.editAiPreviewUrl.set(url);
+          } else if (b64) {
+            this.editAiPreviewUrl.set(`data:image/png;base64,${b64}`);
+          }
+          if (b64) {
+            this.editSelectedFile.set(
+              this.base64ToPngFile(b64, 'ai-embroidery-template.png')
+            );
+          }
+          this.isEditAiGenerating.set(false);
+          this.snackBar.open(
+            'AI template ready — it will replace the cover when you save (or pick another file below).',
+            'Dismiss',
+            { duration: 4500 }
+          );
+        },
+        error: (err) => {
+          this.isEditAiGenerating.set(false);
+          const msg =
+            err?.error?.message ??
+            (typeof err?.error === 'string' ? err.error : null) ??
+            'Could not generate template.';
+          this.editError.set(msg);
+        },
+      });
+  }
+
   private base64ToPngFile(base64: string, filename: string): File {
     const binary = atob(base64);
     const bytes = new Uint8Array(binary.length);
@@ -196,6 +263,9 @@ export class EmbroideryComponent implements OnInit {
     const file = input.files?.[0] ?? null;
     this.editSelectedFile.set(file);
     this.editError.set(null);
+    if (file) {
+      this.editAiPreviewUrl.set(null);
+    }
   }
 
   submitCreate(): void {
@@ -209,18 +279,20 @@ export class EmbroideryComponent implements OnInit {
       return;
     }
 
-    const { name, description } = this.createForm.getRawValue();
+    const { name, description, material_ids } = this.createForm.getRawValue();
+    const mids = (material_ids as number[] | undefined) ?? [];
     this.isSubmitting.set(true);
 
     this.embroideryService
       .createEmbroidery(
         { name: name!.trim(), description: description!.trim() },
-        file
+        file,
+        mids
       )
       .subscribe({
         next: (response) => {
           this.embroideryStore.addEmbroidery(response.results.embroidery);
-          this.createForm.reset();
+          this.createForm.reset({ material_ids: [] });
           this.selectedFile.set(null);
           this.aiPreviewUrl.set(null);
           this.dialogRef?.close();
@@ -246,7 +318,8 @@ export class EmbroideryComponent implements OnInit {
       return;
     }
 
-    const { name, description } = this.editForm.getRawValue();
+    const { name, description, material_ids } = this.editForm.getRawValue();
+    const mids = (material_ids as number[] | undefined) ?? [];
     const file = this.editSelectedFile();
     this.isEditSubmitting.set(true);
 
@@ -254,13 +327,15 @@ export class EmbroideryComponent implements OnInit {
       .updateEmbroidery(
         id,
         { name: name!.trim(), description: description!.trim() },
-        file ?? undefined
+        file ?? undefined,
+        mids
       )
       .subscribe({
         next: (response) => {
           this.embroideryStore.updateEmbroidery(response.results.embroidery);
-          this.editForm.reset();
+          this.editForm.reset({ material_ids: [] });
           this.editSelectedFile.set(null);
+          this.editAiPreviewUrl.set(null);
           this.editingId.set(null);
           this.editDialogRef?.close();
           this.isEditSubmitting.set(false);

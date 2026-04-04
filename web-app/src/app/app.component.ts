@@ -21,6 +21,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { LoginComponent } from './auth/login/login.component';
+import { IdleTimeoutService } from './core/services/idle-timeout.service';
 
 @Component({
   selector: 'app-root',
@@ -82,6 +83,7 @@ export class AppComponent implements OnInit {
   });
 
   constructor() {
+    inject(IdleTimeoutService);
     this.changeEmailForm = this.fb.group({
       email: [
         '',

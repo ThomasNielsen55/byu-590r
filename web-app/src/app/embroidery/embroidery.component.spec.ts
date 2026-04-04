@@ -24,6 +24,9 @@ describe('EmbroideryComponent', () => {
     }).compileComponents();
 
     const service = TestBed.inject(EmbroideryService);
+    spyOn(service, 'getMaterials').and.returnValue(
+      of({ success: true, message: 'Materials', results: [] })
+    );
     getEmbroideriesSpy = spyOn(service, 'getEmbroideries').and.returnValue(
       of({
         success: true,

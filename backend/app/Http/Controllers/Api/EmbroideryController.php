@@ -20,7 +20,7 @@ class EmbroideryController extends BaseController
      */
     public function index()
     {
-        $embroideries = Embroidery::orderBy('name', 'asc')->get();
+        $embroideries = Embroidery::with('materials')->orderBy('name', 'asc')->get();
 
         foreach ($embroideries as $embroidery) {
             $embroidery->embroidery_picture = $this->getS3Url($embroidery->embroidery_picture);
@@ -38,6 +38,8 @@ class EmbroideryController extends BaseController
             'name' => 'required|string|max:255',
             'description' => 'required|string',
             'file' => 'required|image|mimes:jpeg,png,jpg,gif,svg',
+            'material_ids' => 'nullable|array',
+            'material_ids.*' => 'integer|exists:materials,id',
         ]);
 
         if ($validator->fails()) {
@@ -76,6 +78,9 @@ class EmbroideryController extends BaseController
         $embroidery->name = $request['name'];
         $embroidery->description = $request['description'];
         $embroidery->save();
+
+        $embroidery->materials()->sync($this->normalizedMaterialIds($request));
+        $embroidery->load('materials');
 
         if (isset($embroidery->embroidery_picture)) {
             $embroidery->embroidery_picture = $this->getS3Url($embroidery->embroidery_picture);
@@ -156,6 +161,8 @@ class EmbroideryController extends BaseController
             'name' => 'required|string|max:255',
             'description' => 'required|string',
             'file' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg',
+            'material_ids' => 'nullable|array',
+            'material_ids.*' => 'integer|exists:materials,id',
         ]);
 
         if ($validator->fails()) {
@@ -197,6 +204,9 @@ class EmbroideryController extends BaseController
         $embroidery->name = $request['name'];
         $embroidery->description = $request['description'];
         $embroidery->save();
+
+        $embroidery->materials()->sync($this->normalizedMaterialIds($request));
+        $embroidery->load('materials');
 
         if (isset($embroidery->embroidery_picture)) {
             $embroidery->embroidery_picture = $this->getS3Url($embroidery->embroidery_picture);
@@ -272,11 +282,34 @@ class EmbroideryController extends BaseController
 
         $embroidery->save();
 
+        $embroidery->load('materials');
+
         if (isset($embroidery->embroidery_picture)) {
             $embroidery->embroidery_picture = $this->getS3Url($embroidery->embroidery_picture);
         }
         $success['embroidery'] = $embroidery;
 
         return $this->sendResponse($success, 'Embroidery picture successfully updated!');
+    }
+
+    /**
+     * @return array<int, int>
+     */
+    private function normalizedMaterialIds(Request $request): array
+    {
+        $raw = $request->input('material_ids', []);
+        if (! is_array($raw)) {
+            return [];
+        }
+
+        $ids = [];
+        foreach ($raw as $v) {
+            $id = (int) $v;
+            if ($id > 0) {
+                $ids[] = $id;
+            }
+        }
+
+        return array_values(array_unique($ids));
     }
 }

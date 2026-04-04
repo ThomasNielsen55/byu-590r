@@ -4,11 +4,20 @@ import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { AuthService } from './auth.service';
 
+export interface Material {
+  id: number;
+  name: string;
+  kind?: string | null;
+  dmc_number?: string | null;
+  brand?: string | null;
+}
+
 export interface Embroidery {
   id: number;
   name: string;
   description: string;
   embroidery_picture: string | null;
+  materials?: Material[];
 }
 
 @Injectable({
@@ -47,9 +56,22 @@ export class EmbroideryService {
     }>(`${this.apiUrl}embroideries`, { headers: this.getAuthHeaders() });
   }
 
+  getMaterials(): Observable<{
+    success: boolean;
+    results: Material[];
+    message: string;
+  }> {
+    return this.http.get<{
+      success: boolean;
+      results: Material[];
+      message: string;
+    }>(`${this.apiUrl}materials`, { headers: this.getAuthHeaders() });
+  }
+
   createEmbroidery(
     payload: { name: string; description: string },
-    file: File
+    file: File,
+    materialIds: number[] = []
   ): Observable<{
     success: boolean;
     results: { embroidery: Embroidery };
@@ -59,6 +81,9 @@ export class EmbroideryService {
     formData.append('file', file);
     formData.append('name', payload.name);
     formData.append('description', payload.description);
+    for (const id of materialIds) {
+      formData.append('material_ids[]', String(id));
+    }
     return this.http.post<{
       success: boolean;
       results: { embroidery: Embroidery };
@@ -74,7 +99,8 @@ export class EmbroideryService {
   updateEmbroidery(
     id: number,
     payload: { name: string; description: string },
-    file?: File | null
+    file?: File | null,
+    materialIds: number[] = []
   ): Observable<{
     success: boolean;
     results: { embroidery: Embroidery };
@@ -85,6 +111,9 @@ export class EmbroideryService {
     formData.append('description', payload.description);
     if (file) {
       formData.append('file', file);
+    }
+    for (const mid of materialIds) {
+      formData.append('material_ids[]', String(mid));
     }
     return this.http.post<{
       success: boolean;
