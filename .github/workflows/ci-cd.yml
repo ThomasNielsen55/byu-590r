@@ -192,6 +192,27 @@ jobs:
             ([ -z '${{ secrets.OPENAI_API_KEY }}' ] || (grep -q '^OPENAI_API_KEY=' .env && sed -i 's|^OPENAI_API_KEY=.*|OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}|' .env || echo 'OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}' >> .env)); \
             true"
 
+      - name: PHP upload limits on EC2 (book covers, avatars, embroidery)
+        run: |
+          ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_HOST }} bash -s << 'ENDSSH'
+          set -e
+          shopt -s nullglob
+          php_conf_dirs=(/etc/php/*/apache2/conf.d)
+          if [ ${#php_conf_dirs[@]} -eq 0 ]; then
+            echo "No /etc/php/*/apache2/conf.d found; skipping PHP ini (custom stack?)"
+            exit 0
+          fi
+          for d in "${php_conf_dirs[@]}"; do
+            echo "Writing 99-byu590r-uploads.ini -> $d"
+            printf '%s\n' \
+              'upload_max_filesize = 32M' \
+              'post_max_size = 40M' \
+              'max_file_uploads = 30' \
+              | sudo tee "$d/99-byu590r-uploads.ini" > /dev/null
+          done
+          sudo systemctl restart apache2
+          ENDSSH
+
       - name: Migrate and restart backend
         run: |
           ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_HOST }} "export PATH=/usr/bin:/usr/local/bin:\$PATH && cd /var/www/html/api && php artisan config:clear && php artisan migrate --force && php artisan migrate --seed --force 2>/dev/null || true && sudo systemctl restart apache2"

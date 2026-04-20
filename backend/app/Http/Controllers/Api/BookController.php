@@ -33,16 +33,33 @@ class BookController extends BaseController
      */
     public function store(Request $request)
     {
+        if (! $request->hasFile('file')) {
+            return $this->sendError(
+                'No cover image was received. Use JPEG, PNG, GIF, or SVG (10MB max). If your file is small and you still see this, the server upload limit may be too low—redeploy so PHP upload limits are applied, or ask your host to raise upload_max_filesize and post_max_size.',
+                [
+                    'file' => [
+                        'The file did not reach the server (often caused by PHP upload_max_filesize / post_max_size on production).',
+                    ],
+                ],
+                422
+            );
+        }
+
         $validator = Validator::make($request->all(), [
             'name' => 'required',
             'genre_id' => 'required',
             'description' => 'required',
-            'file' => 'required|image|mimes:jpeg,png,jpg,gif,svg',
-            'inventory_total_qty' => 'required|integer|min:1'
+            'file' => 'required|image|mimes:jpeg,png,jpg,gif,svg|max:10240',
+            'inventory_total_qty' => 'required|integer|min:1',
+        ], [
+            'file.uploaded' => 'The cover did not finish uploading. Try a smaller image (under 10MB) or redeploy after PHP upload limits are increased on the server.',
+            'file.max' => 'Cover image must be 10MB or smaller.',
+            'file.image' => 'Cover must be an image file.',
+            'file.mimes' => 'Cover must be jpeg, png, jpg, gif, or svg.',
         ]);
 
         if ($validator->fails()) {
-            return $this->sendError('Validation Error.', $validator->errors());
+            return $this->sendError('Please correct the fields below.', $validator->errors(), 422);
         }
 
         $book = new Book;
@@ -90,12 +107,29 @@ class BookController extends BaseController
 
     public function updateBookPicture(Request $request, $id)
     {
+        if (! $request->hasFile('file')) {
+            return $this->sendError(
+                'No image was received. Use JPEG, PNG, GIF, or SVG (10MB max). On production, PHP upload limits must allow the file size—see deploy PHP ini (upload_max_filesize / post_max_size).',
+                [
+                    'file' => [
+                        'The file did not reach the server (check PHP upload limits on the server).',
+                    ],
+                ],
+                422
+            );
+        }
+
         $validator = Validator::make($request->all(), [
-            'file' => 'required|image|mimes:jpeg,png,jpg,gif,svg'
+            'file' => 'required|image|mimes:jpeg,png,jpg,gif,svg|max:10240',
+        ], [
+            'file.uploaded' => 'The image did not finish uploading. Try a smaller file (under 10MB).',
+            'file.max' => 'Cover image must be 10MB or smaller.',
+            'file.image' => 'Cover must be an image file.',
+            'file.mimes' => 'Cover must be jpeg, png, jpg, gif, or svg.',
         ]);
 
         if ($validator->fails()) {
-            return $this->sendError('Validation Error.', $validator->errors());
+            return $this->sendError('Please correct the fields below.', $validator->errors(), 422);
         }
 
         $book = Book::findOrFail($id);
