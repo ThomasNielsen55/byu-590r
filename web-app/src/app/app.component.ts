@@ -54,7 +54,7 @@ export class AppComponent implements OnInit {
   private fb = inject(FormBuilder);
   private snackBar = inject(MatSnackBar);
 
-  theme = signal<'light' | 'dark'>('dark');
+  theme = signal<'light' | 'dark'>('light');
   profileDialog = signal(false);
   profileIsUploading = signal(false);
   selectedAvatarFile = signal<File | null>(null);
@@ -153,13 +153,19 @@ export class AppComponent implements OnInit {
 
   onAvatarFileSelected(event: Event): void {
     const input = event.target as HTMLInputElement;
-    if (!input.files || input.files.length === 0) return;
+    if (!input.files?.length) {
+      return;
+    }
     this.selectedAvatarFile.set(input.files[0]);
+    this.addOrReplaceAvatar();
+    input.value = '';
   }
 
   addOrReplaceAvatar(): void {
     const image = this.selectedAvatarFile();
-    if (!image) return;
+    if (!image) {
+      return;
+    }
     this.profileIsUploading.set(true);
     this.userStore.addOrReplaceAvatar(image).subscribe({
       next: (response) => {
@@ -168,7 +174,7 @@ export class AppComponent implements OnInit {
         this.profileIsUploading.set(false);
       },
       error: () => {
-        this.snackBar.open('Error. Try again', 'Close', {
+        this.snackBar.open('Could not update photo. Try again.', 'Close', {
           duration: 5000,
           horizontalPosition: 'center',
           verticalPosition: 'top',

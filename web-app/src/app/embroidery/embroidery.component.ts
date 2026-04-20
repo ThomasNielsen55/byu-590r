@@ -27,11 +27,36 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { EmbroideryStore } from '../core/stores/embroidery.store';
 import { MatSelectModule } from '@angular/material/select';
+import { MatCheckboxModule } from '@angular/material/checkbox';
+import { MatDatepickerModule } from '@angular/material/datepicker';
+import { MatNativeDateModule } from '@angular/material/core';
 import {
   EmbroideryService,
   Embroidery,
   Material,
+  Pattern,
+  CompletionLogPayload,
 } from '../core/services/embroidery.service';
+import { formatHttpApiError } from '../core/utils/http-api-error';
+
+/** Completion log controls: required date + rating when enabled. */
+function applyCompletionValidators(form: FormGroup, enabled: boolean): void {
+  const d = form.get('completion_completed_at');
+  const r = form.get('completion_satisfaction_rating');
+  if (enabled) {
+    d?.setValidators([Validators.required]);
+    r?.setValidators([
+      Validators.required,
+      Validators.min(1),
+      Validators.max(10),
+    ]);
+  } else {
+    d?.clearValidators();
+    r?.clearValidators();
+  }
+  d?.updateValueAndValidity({ emitEvent: false });
+  r?.updateValueAndValidity({ emitEvent: false });
+}
 
 @Component({
   selector: 'app-embroidery',
@@ -48,6 +73,9 @@ import {
     MatSnackBarModule,
     MatProgressSpinnerModule,
     MatSelectModule,
+    MatCheckboxModule,
+    MatDatepickerModule,
+    MatNativeDateModule,
   ],
   templateUrl: './embroidery.component.html',
   styleUrl: './embroidery.component.scss',
@@ -68,20 +96,34 @@ export class EmbroideryComponent implements OnInit {
   private dialog = inject(MatDialog);
 
   embroidery = this.embroideryStore.embroidery;
+  loadListError = this.embroideryStore.loadError;
 
   createForm: FormGroup = this.fb.group({
     name: ['', [Validators.required, Validators.maxLength(255)]],
     description: ['', [Validators.required]],
+    pattern_id: [null as number | null],
     material_ids: [[] as number[]],
+    completion_enabled: [false],
+    completion_completed_at: [null as Date | null],
+    completion_hours_spent: [''],
+    completion_satisfaction_rating: [''],
+    completion_notes: ['', [Validators.maxLength(5000)]],
   });
 
   editForm: FormGroup = this.fb.group({
     name: ['', [Validators.required, Validators.maxLength(255)]],
     description: ['', [Validators.required]],
+    pattern_id: [null as number | null],
     material_ids: [[] as number[]],
+    completion_enabled: [false],
+    completion_completed_at: [null as Date | null],
+    completion_hours_spent: [''],
+    completion_satisfaction_rating: [''],
+    completion_notes: ['', [Validators.maxLength(5000)]],
   });
 
   materials = signal<Material[]>([]);
+  patterns = signal<Pattern[]>([]);
 
   editingId = signal<number | null>(null);
   pendingDelete = signal<Embroidery | null>(null);
@@ -103,13 +145,41 @@ export class EmbroideryComponent implements OnInit {
 
   ngOnInit(): void {
     this.loadMaterials();
+    this.loadPatterns();
     this.loadEmbroideries();
   }
 
   private loadMaterials(): void {
     this.embroideryService.getMaterials().subscribe({
       next: (res) => this.materials.set(res.results),
-      error: (err) => console.error('Error loading materials:', err),
+      error: (err) => {
+        console.error('Error loading materials:', err);
+        this.snackBar.open(
+          formatHttpApiError(
+            err,
+            'Could not load the materials list. Refresh the page or try again shortly.'
+          ),
+          'Dismiss',
+          { duration: 7000, panelClass: ['error-snackbar', 'error-snackbar-multiline'] }
+        );
+      },
+    });
+  }
+
+  private loadPatterns(): void {
+    this.embroideryService.getPatterns().subscribe({
+      next: (res) => this.patterns.set(res.results),
+      error: (err) => {
+        console.error('Error loading patterns:', err);
+        this.snackBar.open(
+          formatHttpApiError(
+            err,
+            'Could not load patterns. Refresh the page or try again shortly.'
+          ),
+          'Dismiss',
+          { duration: 7000, panelClass: ['error-snackbar', 'error-snackbar-multiline'] }
+        );
+      },
     });
   }
 
@@ -117,13 +187,33 @@ export class EmbroideryComponent implements OnInit {
     this.embroideryStore.loadEmbroideries();
   }
 
+  retryLoadEmbroideries(): void {
+    this.embroideryStore.loadEmbroideries();
+  }
+
+  dismissLoadListError(): void {
+    this.embroideryStore.clearLoadError();
+  }
+
   openAddDialog(): void {
     this.createError.set(null);
     this.selectedFile.set(null);
     this.aiPreviewUrl.set(null);
     this.isAiGenerating.set(false);
-    this.createForm.reset({ material_ids: [] });
-    this.dialogRef = this.dialog.open(this.addDialogTpl, { width: '680px' });
+    this.createForm.reset({
+      pattern_id: null,
+      material_ids: [],
+      completion_enabled: false,
+      completion_completed_at: null,
+      completion_hours_spent: '',
+      completion_satisfaction_rating: '',
+      completion_notes: '',
+    });
+    applyCompletionValidators(this.createForm, false);
+    this.dialogRef = this.dialog.open(this.addDialogTpl, {
+      width: '720px',
+      maxWidth: '95vw',
+    });
   }
 
   openEditDialog(item: Embroidery): void {
@@ -132,18 +222,95 @@ export class EmbroideryComponent implements OnInit {
     this.editAiPreviewUrl.set(null);
     this.isEditAiGenerating.set(false);
     this.editingId.set(item.id);
+    const log = item.completion_log;
     this.editForm.patchValue({
       name: item.name,
       description: item.description,
+      pattern_id: item.patterns?.length ? item.patterns[0].id : null,
       material_ids: item.materials?.map((m) => m.id) ?? [],
+      completion_enabled: !!log,
+      completion_completed_at: this.parseIsoToDate(log?.completed_at),
+      completion_hours_spent:
+        log?.hours_spent !== undefined && log?.hours_spent !== null
+          ? String(log.hours_spent)
+          : '',
+      completion_satisfaction_rating:
+        log?.satisfaction_rating != null ? String(log.satisfaction_rating) : '',
+      completion_notes: log?.notes ?? '',
     });
-    this.editDialogRef = this.dialog.open(this.editDialogTpl, { width: '680px' });
+    applyCompletionValidators(this.editForm, !!log);
+    this.editDialogRef = this.dialog.open(this.editDialogTpl, {
+      width: '720px',
+      maxWidth: '95vw',
+    });
+  }
+
+  onCompletionEnabledChange(enabled: boolean, form: FormGroup): void {
+    applyCompletionValidators(form, enabled);
+  }
+
+  private parseIsoToDate(iso: string | undefined): Date | null {
+    if (!iso) {
+      return null;
+    }
+    const d = new Date(iso);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+
+  /** Template: short date for completion log column. */
+  displayShortDate(iso: string | undefined): string {
+    if (!iso) {
+      return '';
+    }
+    return iso.slice(0, 10);
+  }
+
+  /** Sets completion date to today (local) for calendar + API. */
+  setCompletedDateToday(form: FormGroup): void {
+    const today = new Date();
+    today.setHours(12, 0, 0, 0);
+    form.patchValue({ completion_completed_at: today });
+    form.get('completion_completed_at')?.markAsTouched();
+    form.get('completion_completed_at')?.updateValueAndValidity();
+  }
+
+  private dateToApiDateString(value: unknown): string {
+    if (value == null || value === '') {
+      return '';
+    }
+    const date =
+      value instanceof Date ? value : new Date(String(value));
+    if (Number.isNaN(date.getTime())) {
+      return '';
+    }
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
+
+  private completionPayloadFromForm(form: FormGroup): CompletionLogPayload {
+    const enabled = !!form.get('completion_enabled')?.value;
+    if (!enabled) {
+      return { enabled: false };
+    }
+    return {
+      enabled: true,
+      completedAt: this.dateToApiDateString(
+        form.get('completion_completed_at')?.value
+      ),
+      hoursSpent: (form.get('completion_hours_spent')?.value as string) || '',
+      satisfactionRating:
+        (form.get('completion_satisfaction_rating')?.value as string) || '',
+      notes: (form.get('completion_notes')?.value as string) || '',
+    };
   }
 
   openDeleteDialog(item: Embroidery): void {
     this.pendingDelete.set(item);
     this.deleteDialogRef = this.dialog.open(this.deleteDialogTpl, {
       width: '420px',
+      maxWidth: '95vw',
     });
   }
 
@@ -194,11 +361,12 @@ export class EmbroideryComponent implements OnInit {
         },
         error: (err) => {
           this.isAiGenerating.set(false);
-          const msg =
-            err?.error?.message ??
-            (typeof err?.error === 'string' ? err.error : null) ??
-            'Could not generate template.';
-          this.createError.set(msg);
+          this.createError.set(
+            formatHttpApiError(
+              err,
+              'Could not generate the AI template. Check your connection and try again.'
+            )
+          );
         },
       });
   }
@@ -240,11 +408,12 @@ export class EmbroideryComponent implements OnInit {
         },
         error: (err) => {
           this.isEditAiGenerating.set(false);
-          const msg =
-            err?.error?.message ??
-            (typeof err?.error === 'string' ? err.error : null) ??
-            'Could not generate template.';
-          this.editError.set(msg);
+          this.editError.set(
+            formatHttpApiError(
+              err,
+              'Could not generate the AI template. Check your connection and try again.'
+            )
+          );
         },
       });
   }
@@ -279,20 +448,40 @@ export class EmbroideryComponent implements OnInit {
       return;
     }
 
-    const { name, description, material_ids } = this.createForm.getRawValue();
+    const { name, description, material_ids, pattern_id } =
+      this.createForm.getRawValue();
     const mids = (material_ids as number[] | undefined) ?? [];
+    const patternId =
+      pattern_id != null && Number(pattern_id) > 0
+        ? Number(pattern_id)
+        : null;
+    const completion = this.completionPayloadFromForm(this.createForm);
     this.isSubmitting.set(true);
 
     this.embroideryService
       .createEmbroidery(
-        { name: name!.trim(), description: description!.trim() },
+        {
+          name: name!.trim(),
+          description: description!.trim(),
+          completion,
+        },
         file,
-        mids
+        mids,
+        patternId
       )
       .subscribe({
         next: (response) => {
           this.embroideryStore.addEmbroidery(response.results.embroidery);
-          this.createForm.reset({ material_ids: [] });
+          this.createForm.reset({
+            pattern_id: null,
+            material_ids: [],
+            completion_enabled: false,
+            completion_completed_at: null,
+            completion_hours_spent: '',
+            completion_satisfaction_rating: '',
+            completion_notes: '',
+          });
+          applyCompletionValidators(this.createForm, false);
           this.selectedFile.set(null);
           this.aiPreviewUrl.set(null);
           this.dialogRef?.close();
@@ -301,11 +490,12 @@ export class EmbroideryComponent implements OnInit {
         },
         error: (err) => {
           this.isSubmitting.set(false);
-          const msg =
-            err?.error?.message ??
-            (typeof err?.error === 'string' ? err.error : null) ??
-            'Could not save embroidery.';
-          this.createError.set(msg);
+          this.createError.set(
+            formatHttpApiError(
+              err,
+              'Could not save this embroidery. Fix the issues below and try again.'
+            )
+          );
         },
       });
   }
@@ -318,22 +508,42 @@ export class EmbroideryComponent implements OnInit {
       return;
     }
 
-    const { name, description, material_ids } = this.editForm.getRawValue();
+    const { name, description, material_ids, pattern_id } =
+      this.editForm.getRawValue();
     const mids = (material_ids as number[] | undefined) ?? [];
+    const patternId =
+      pattern_id != null && Number(pattern_id) > 0
+        ? Number(pattern_id)
+        : null;
     const file = this.editSelectedFile();
+    const completion = this.completionPayloadFromForm(this.editForm);
     this.isEditSubmitting.set(true);
 
     this.embroideryService
       .updateEmbroidery(
         id,
-        { name: name!.trim(), description: description!.trim() },
+        {
+          name: name!.trim(),
+          description: description!.trim(),
+          completion,
+        },
         file ?? undefined,
-        mids
+        mids,
+        patternId
       )
       .subscribe({
         next: (response) => {
           this.embroideryStore.updateEmbroidery(response.results.embroidery);
-          this.editForm.reset({ material_ids: [] });
+          this.editForm.reset({
+            pattern_id: null,
+            material_ids: [],
+            completion_enabled: false,
+            completion_completed_at: null,
+            completion_hours_spent: '',
+            completion_satisfaction_rating: '',
+            completion_notes: '',
+          });
+          applyCompletionValidators(this.editForm, false);
           this.editSelectedFile.set(null);
           this.editAiPreviewUrl.set(null);
           this.editingId.set(null);
@@ -343,11 +553,12 @@ export class EmbroideryComponent implements OnInit {
         },
         error: (err) => {
           this.isEditSubmitting.set(false);
-          const msg =
-            err?.error?.message ??
-            (typeof err?.error === 'string' ? err.error : null) ??
-            'Could not update embroidery.';
-          this.editError.set(msg);
+          this.editError.set(
+            formatHttpApiError(
+              err,
+              'Could not update this embroidery. Fix the issues below and try again.'
+            )
+          );
         },
       });
   }
@@ -370,11 +581,17 @@ export class EmbroideryComponent implements OnInit {
       },
       error: (err) => {
         this.isDeleteSubmitting.set(false);
-        const msg =
-          err?.error?.message ??
-          (typeof err?.error === 'string' ? err.error : null) ??
-          'Could not delete embroidery.';
-        this.snackBar.open(msg, 'Dismiss', { duration: 5000 });
+        this.snackBar.open(
+          formatHttpApiError(
+            err,
+            'Could not delete this embroidery. Try again or refresh the page.'
+          ),
+          'Dismiss',
+          {
+            duration: 9000,
+            panelClass: ['error-snackbar', 'error-snackbar-multiline'],
+          }
+        );
       },
     });
   }

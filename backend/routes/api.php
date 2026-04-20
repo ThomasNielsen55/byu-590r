@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\BookController;
 use App\Http\Controllers\Api\EmbroideryController;
 use App\Http\Controllers\Api\MaterialController;
+use App\Http\Controllers\Api\PatternController;
 use App\Http\Controllers\Api\HelloWorldController;
 use App\Http\Controllers\Api\RegisterController;
 use App\Http\Controllers\Api\UserController;
@@ -38,6 +39,7 @@ Route::middleware(\App\Http\Middleware\AuthenticateApi::class)->group(function (
 
     Route::resource('books', BookController::class);
     Route::get('materials', [MaterialController::class, 'index']);
+    Route::get('patterns', [PatternController::class, 'index']);
     Route::post('embroideries/generate-template', [EmbroideryController::class, 'generateTemplate']);
     // Multipart update uses POST (PHP does not reliably parse multipart bodies on PUT).
     Route::post('embroideries/{embroidery}', [EmbroideryController::class, 'update']);

@@ -1,4 +1,10 @@
-import { Component, inject, signal } from '@angular/core';
+import {
+  Component,
+  ElementRef,
+  inject,
+  signal,
+  ViewChild,
+} from '@angular/core';
 import {
   FormBuilder,
   FormGroup,
@@ -33,6 +39,18 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
   styleUrl: './login.component.scss',
 })
 export class LoginComponent {
+  @ViewChild('loginPasswordInput')
+  private loginPasswordInput?: ElementRef<HTMLInputElement>;
+
+  @ViewChild('registerLastNameInput')
+  private registerLastNameInput?: ElementRef<HTMLInputElement>;
+  @ViewChild('registerEmailInput')
+  private registerEmailInput?: ElementRef<HTMLInputElement>;
+  @ViewChild('registerPasswordInput')
+  private registerPasswordInput?: ElementRef<HTMLInputElement>;
+  @ViewChild('registerPasswordConfirmInput')
+  private registerPasswordConfirmInput?: ElementRef<HTMLInputElement>;
+
   private authService = inject(AuthService);
   private authStore = inject(AuthStore);
   private router = inject(Router);
@@ -80,6 +98,41 @@ export class LoginComponent {
         [Validators.required, Validators.minLength(3), Validators.email],
       ],
     });
+  }
+
+  /** Enter on email moves to password instead of submitting an incomplete form. */
+  onLoginEmailEnter(event: Event): void {
+    event.preventDefault();
+    this.loginPasswordInput?.nativeElement.focus();
+  }
+
+  onRegisterFieldEnter(
+    event: Event,
+    next:
+      | 'last_name'
+      | 'email'
+      | 'password'
+      | 'password_confirm'
+      | 'submit'
+  ): void {
+    event.preventDefault();
+    switch (next) {
+      case 'last_name':
+        this.registerLastNameInput?.nativeElement.focus();
+        break;
+      case 'email':
+        this.registerEmailInput?.nativeElement.focus();
+        break;
+      case 'password':
+        this.registerPasswordInput?.nativeElement.focus();
+        break;
+      case 'password_confirm':
+        this.registerPasswordConfirmInput?.nativeElement.focus();
+        break;
+      case 'submit':
+        this.submitRegister();
+        break;
+    }
   }
 
   passwordMatchValidator(form: FormGroup) {

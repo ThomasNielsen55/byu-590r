@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Models\CompletionLog;
 use App\Models\Embroidery;
 use App\Services\OpenAIService;
 use Illuminate\Http\Request;
@@ -20,7 +21,7 @@ class EmbroideryController extends BaseController
      */
     public function index()
     {
-        $embroideries = Embroidery::with('materials')->orderBy('name', 'asc')->get();
+        $embroideries = Embroidery::with(['materials', 'completionLog', 'patterns'])->orderBy('name', 'asc')->get();
 
         foreach ($embroideries as $embroidery) {
             $embroidery->embroidery_picture = $this->getS3Url($embroidery->embroidery_picture);
@@ -34,16 +35,14 @@ class EmbroideryController extends BaseController
      */
     public function store(Request $request)
     {
-        $validator = Validator::make($request->all(), [
-            'name' => 'required|string|max:255',
-            'description' => 'required|string',
-            'file' => 'required|image|mimes:jpeg,png,jpg,gif,svg',
-            'material_ids' => 'nullable|array',
-            'material_ids.*' => 'integer|exists:materials,id',
-        ]);
+        $validator = Validator::make(
+            $request->all(),
+            $this->embroideryValidationRules($request, true),
+            $this->embroideryValidationMessages()
+        );
 
         if ($validator->fails()) {
-            return $this->sendError('Validation Error.', $validator->errors());
+            return $this->sendError('Please correct the fields below.', $validator->errors(), 422);
         }
 
         $embroidery = new Embroidery;
@@ -60,7 +59,11 @@ class EmbroideryController extends BaseController
                 if (! $path) {
                     Log::error('Embroidery create upload failed: storeAs returned empty path');
 
-                    return $this->sendError('Embroidery picture failed to upload!', [], 500);
+                    return $this->sendError(
+                        'Cover image could not be saved to storage. Try a smaller file or a different format.',
+                        [],
+                        500
+                    );
                 }
                 try {
                     Storage::disk('s3')->setVisibility($path, 'public');
@@ -71,7 +74,11 @@ class EmbroideryController extends BaseController
             } catch (\Throwable $e) {
                 Log::error('Embroidery create upload failed: '.$e->getMessage(), ['exception' => $e]);
 
-                return $this->sendError('Embroidery picture failed to upload!', [], 500);
+                return $this->sendError(
+                    'Cover image could not be saved to storage. Try a smaller file or a different format.',
+                    [],
+                    500
+                );
             }
         }
 
@@ -80,7 +87,9 @@ class EmbroideryController extends BaseController
         $embroidery->save();
 
         $embroidery->materials()->sync($this->normalizedMaterialIds($request));
-        $embroidery->load('materials');
+        $this->syncSinglePattern($embroidery, $request);
+        $this->syncCompletionLog($embroidery, $request);
+        $embroidery->load(['materials', 'completionLog', 'patterns']);
 
         if (isset($embroidery->embroidery_picture)) {
             $embroidery->embroidery_picture = $this->getS3Url($embroidery->embroidery_picture);
@@ -98,10 +107,15 @@ class EmbroideryController extends BaseController
         $validator = Validator::make($request->all(), [
             'title' => 'required|string|max:255',
             'description' => 'required|string|max:5000',
+        ], [
+            'title.required' => 'Enter a project title for the AI template.',
+            'title.max' => 'Title must be 255 characters or fewer.',
+            'description.required' => 'Enter a description so the AI can suggest a design.',
+            'description.max' => 'Description must be 5,000 characters or fewer.',
         ]);
 
         if ($validator->fails()) {
-            return $this->sendError('Validation Error.', $validator->errors(), 422);
+            return $this->sendError('Please correct the fields below.', $validator->errors(), 422);
         }
 
         if (! $this->openAI->isConfigured()) {
@@ -145,7 +159,7 @@ class EmbroideryController extends BaseController
 
             // 503 = upstream (OpenAI) or generation failed — not a proxy/gateway fault
             return $this->sendError(
-                $e->getMessage() ?: 'Image generation failed.',
+                'Could not generate the template image. Check your OpenAI API key, billing, and rate limits, then try again.',
                 [],
                 503
             );
@@ -157,16 +171,14 @@ class EmbroideryController extends BaseController
      */
     public function update(Request $request, Embroidery $embroidery)
     {
-        $validator = Validator::make($request->all(), [
-            'name' => 'required|string|max:255',
-            'description' => 'required|string',
-            'file' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg',
-            'material_ids' => 'nullable|array',
-            'material_ids.*' => 'integer|exists:materials,id',
-        ]);
+        $validator = Validator::make(
+            $request->all(),
+            $this->embroideryValidationRules($request, false),
+            $this->embroideryValidationMessages()
+        );
 
         if ($validator->fails()) {
-            return $this->sendError('Validation Error.', $validator->errors());
+            return $this->sendError('Please correct the fields below.', $validator->errors(), 422);
         }
 
         $oldPicturePath = $embroidery->embroidery_picture;
@@ -183,7 +195,11 @@ class EmbroideryController extends BaseController
                 if (! $path) {
                     Log::error('Embroidery update upload failed: storeAs returned empty path');
 
-                    return $this->sendError('Embroidery picture failed to upload!', [], 500);
+                    return $this->sendError(
+                        'Cover image could not be saved to storage. Try a smaller file or a different format.',
+                        [],
+                        500
+                    );
                 }
                 try {
                     Storage::disk('s3')->setVisibility($path, 'public');
@@ -197,7 +213,11 @@ class EmbroideryController extends BaseController
             } catch (\Throwable $e) {
                 Log::error('Embroidery update upload failed: '.$e->getMessage(), ['exception' => $e]);
 
-                return $this->sendError('Embroidery picture failed to upload!', [], 500);
+                return $this->sendError(
+                    'Cover image could not be saved to storage. Try a smaller file or a different format.',
+                    [],
+                    500
+                );
             }
         }
 
@@ -206,7 +226,9 @@ class EmbroideryController extends BaseController
         $embroidery->save();
 
         $embroidery->materials()->sync($this->normalizedMaterialIds($request));
-        $embroidery->load('materials');
+        $this->syncSinglePattern($embroidery, $request);
+        $this->syncCompletionLog($embroidery, $request);
+        $embroidery->load(['materials', 'completionLog', 'patterns']);
 
         if (isset($embroidery->embroidery_picture)) {
             $embroidery->embroidery_picture = $this->getS3Url($embroidery->embroidery_picture);
@@ -241,10 +263,10 @@ class EmbroideryController extends BaseController
     {
         $validator = Validator::make($request->all(), [
             'file' => 'required|image|mimes:jpeg,png,jpg,gif,svg',
-        ]);
+        ], $this->embroideryPictureFileMessages());
 
         if ($validator->fails()) {
-            return $this->sendError('Validation Error.', $validator->errors());
+            return $this->sendError('Please correct the fields below.', $validator->errors(), 422);
         }
 
         $embroidery = Embroidery::findOrFail($id);
@@ -262,7 +284,11 @@ class EmbroideryController extends BaseController
                 if (! $path) {
                     Log::error('Embroidery picture upload failed: storeAs returned empty path');
 
-                    return $this->sendError('Embroidery picture failed to upload!', [], 500);
+                    return $this->sendError(
+                        'Cover image could not be saved to storage. Try a smaller file or a different format.',
+                        [],
+                        500
+                    );
                 }
                 try {
                     Storage::disk('s3')->setVisibility($path, 'public');
@@ -276,13 +302,17 @@ class EmbroideryController extends BaseController
             } catch (\Throwable $e) {
                 Log::error('Embroidery picture upload failed: '.$e->getMessage(), ['exception' => $e]);
 
-                return $this->sendError('Embroidery picture failed to upload!', [], 500);
+                return $this->sendError(
+                    'Cover image could not be saved to storage. Try a smaller file or a different format.',
+                    [],
+                    500
+                );
             }
         }
 
         $embroidery->save();
 
-        $embroidery->load('materials');
+        $embroidery->load(['materials', 'completionLog', 'patterns']);
 
         if (isset($embroidery->embroidery_picture)) {
             $embroidery->embroidery_picture = $this->getS3Url($embroidery->embroidery_picture);
@@ -290,6 +320,113 @@ class EmbroideryController extends BaseController
         $success['embroidery'] = $embroidery;
 
         return $this->sendResponse($success, 'Embroidery picture successfully updated!');
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function embroideryValidationMessages(): array
+    {
+        return [
+            'name.required' => 'Please enter a project name.',
+            'name.max' => 'Project name must be 255 characters or fewer.',
+            'description.required' => 'Please enter a description for this project.',
+            'file.required' => 'Upload a cover image (JPEG, PNG, GIF, or SVG).',
+            'file.image' => 'The cover must be an image file.',
+            'file.mimes' => 'Cover must be JPEG, PNG, GIF, or SVG.',
+            'material_ids.array' => 'Materials must be a valid list.',
+            'material_ids.*.integer' => 'Each material must be a valid choice.',
+            'material_ids.*.exists' => 'One or more selected materials are not in the catalog.',
+            'pattern_id.integer' => 'Pattern must be a valid selection.',
+            'pattern_id.exists' => 'The selected pattern is not in the catalog.',
+            'completion_enabled.boolean' => 'Completion log must be on or off.',
+            'completion_completed_at.required' => 'Choose the date you finished this project.',
+            'completion_completed_at.date' => 'Enter a valid completion date.',
+            'completion_satisfaction_rating.required' => 'Enter a satisfaction rating from 1 to 10.',
+            'completion_satisfaction_rating.integer' => 'Satisfaction must be a whole number.',
+            'completion_satisfaction_rating.min' => 'Satisfaction must be at least 1.',
+            'completion_satisfaction_rating.max' => 'Satisfaction must be at most 10.',
+            'completion_hours_spent.numeric' => 'Hours must be a number.',
+            'completion_hours_spent.min' => 'Hours cannot be negative.',
+            'completion_hours_spent.max' => 'Hours value is too large.',
+            'completion_notes.max' => 'Notes must be 5,000 characters or fewer.',
+        ];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function embroideryPictureFileMessages(): array
+    {
+        return [
+            'file.required' => 'Choose an image file to upload.',
+            'file.image' => 'The file must be an image.',
+            'file.mimes' => 'Use JPEG, PNG, GIF, or SVG.',
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function embroideryValidationRules(Request $request, bool $isCreate): array
+    {
+        $rules = [
+            'name' => 'required|string|max:255',
+            'description' => 'required|string',
+            'file' => $isCreate ? 'required|image|mimes:jpeg,png,jpg,gif,svg' : 'nullable|image|mimes:jpeg,png,jpg,gif,svg',
+            'material_ids' => 'nullable|array',
+            'material_ids.*' => 'integer|exists:materials,id',
+            'pattern_id' => 'nullable|integer|exists:patterns,id',
+            'completion_enabled' => 'nullable|boolean',
+        ];
+
+        if ($request->boolean('completion_enabled')) {
+            $rules['completion_completed_at'] = 'required|date';
+            $rules['completion_satisfaction_rating'] = 'required|integer|min:1|max:10';
+            $rules['completion_hours_spent'] = 'nullable|numeric|min:0|max:999999.99';
+            $rules['completion_notes'] = 'nullable|string|max:5000';
+        }
+
+        return $rules;
+    }
+
+    /**
+     * Single-select pattern: sync 0 or 1 row on embroidery_pattern (many-to-many).
+     */
+    private function syncSinglePattern(Embroidery $embroidery, Request $request): void
+    {
+        $raw = $request->input('pattern_id');
+        if ($raw === null || $raw === '') {
+            $embroidery->patterns()->sync([]);
+
+            return;
+        }
+        $id = (int) $raw;
+        if ($id > 0) {
+            $embroidery->patterns()->sync([$id]);
+        } else {
+            $embroidery->patterns()->sync([]);
+        }
+    }
+
+    private function syncCompletionLog(Embroidery $embroidery, Request $request): void
+    {
+        if (! $request->boolean('completion_enabled')) {
+            $embroidery->completionLog()?->delete();
+
+            return;
+        }
+
+        $hours = $request->input('completion_hours_spent');
+        CompletionLog::updateOrCreate(
+            ['embroidery_id' => $embroidery->id],
+            [
+                'completed_at' => $request->input('completion_completed_at'),
+                'hours_spent' => $hours === null || $hours === '' ? null : $hours,
+                'satisfaction_rating' => (int) $request->input('completion_satisfaction_rating'),
+                'notes' => $request->input('completion_notes') ?: null,
+            ]
+        );
     }
 
     /**

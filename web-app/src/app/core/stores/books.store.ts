@@ -15,12 +15,10 @@ export interface Genre {
 
 export interface BooksState {
   booksList: Book[];
-  genres: Genre[];
 }
 
 const initialState: BooksState = {
   booksList: [],
-  genres: [],
 };
 
 export const BooksStore = signalStore(

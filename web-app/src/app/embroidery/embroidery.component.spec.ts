@@ -27,6 +27,9 @@ describe('EmbroideryComponent', () => {
     spyOn(service, 'getMaterials').and.returnValue(
       of({ success: true, message: 'Materials', results: [] })
     );
+    spyOn(service, 'getPatterns').and.returnValue(
+      of({ success: true, message: 'Patterns', results: [] })
+    );
     getEmbroideriesSpy = spyOn(service, 'getEmbroideries').and.returnValue(
       of({
         success: true,

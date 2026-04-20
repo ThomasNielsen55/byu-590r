@@ -48,7 +48,7 @@
   &::before {
     width: 400px;
     height: 400px;
-    background: linear-gradient(135deg, colors.$colors-primary-light, colors.$colors-accent);
+    background: linear-gradient(135deg, colors.$colors-primary-light, #a855f7);
     top: -100px;
     right: -100px;
     animation-delay: -5s;
@@ -57,7 +57,7 @@
   &::after {
     width: 300px;
     height: 300px;
-    background: linear-gradient(135deg, #667eea, #764ba2);
+    background: linear-gradient(135deg, #0d9488, #4c1d95);
     bottom: -80px;
     left: -80px;
     animation-delay: -10s;
@@ -222,11 +222,11 @@
   button[color="primary"] {
     background: linear-gradient(135deg, colors.$colors-primary, colors.$colors-primary-dark) !important;
     color: colors.$colors-white !important;
-    box-shadow: 0 4px 15px rgba(25, 118, 210, 0.3);
+    box-shadow: 0 4px 15px rgba(13, 148, 136, 0.35);
 
     &:hover:not(:disabled) {
-      background: linear-gradient(135deg, #115293, #0d47a1) !important;
-      box-shadow: 0 8px 25px rgba(25, 118, 210, 0.5);
+      background: linear-gradient(135deg, #0f766e, #115e59) !important;
+      box-shadow: 0 8px 25px rgba(13, 148, 136, 0.45);
     }
   }
 }

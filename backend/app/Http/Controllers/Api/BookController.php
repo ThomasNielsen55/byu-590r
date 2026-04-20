@@ -178,21 +178,28 @@ class BookController extends BaseController
 
     public function checkoutBook(Request $request, $id)
     {
-        $request['checkout_date'] = date('Y-m-d');
+        // Prefer the browser's local calendar for checkout_date so due_date >= checkout_date
+        // matches what the user picked in <input type="date"> (avoids UTC vs local skew).
+        $checkoutDate = $request->input('checkout_date');
+        if (! is_string($checkoutDate) || ! preg_match('/^\d{4}-\d{2}-\d{2}$/', $checkoutDate)) {
+            $checkoutDate = date('Y-m-d');
+        }
+        $request->merge(['checkout_date' => $checkoutDate]);
+
         $validator = Validator::make($request->all(), [
-            'checkout_date' => 'required',
-            'due_date' => 'required|date_format:Y-m-d|after_or_equal:checkout_date'
+            'checkout_date' => 'required|date_format:Y-m-d',
+            'due_date' => 'required|date_format:Y-m-d|after_or_equal:checkout_date',
         ]);
 
         if ($validator->fails()) {
-            return $this->sendError('Validation Error.', $validator->errors());
+            return $this->sendError('Validation Error.', $validator->errors(), 422);
         }
 
         $book = Book::findOrFail($id);
         $book->checked_qty = $book->checked_qty + 1;
 
         if ($book->checked_qty > $book->inventory_total_qty) {
-            return $this->sendError('Checkout Out Book Can Not Exceed Inventory!');
+            return $this->sendError('Checkout Out Book Can Not Exceed Inventory!', [], 422);
         }
 
         $checkoutId = Checkout::insertGetId([

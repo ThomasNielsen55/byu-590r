@@ -1,14 +1,20 @@
 .embroidery-page {
-  padding: 1rem;
+  padding: clamp(0.5rem, 3vw, 1rem);
   max-width: 1200px;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
   gap: 1rem;
+  box-sizing: border-box;
 }
 
 .embroidery-card {
   width: 100%;
+  border-radius: 18px !important;
+  border: 1px solid rgba(13, 148, 136, 0.16) !important;
+  box-shadow: 0 16px 48px rgba(15, 23, 42, 0.07) !important;
+  background: rgba(255, 255, 255, 0.92) !important;
+  backdrop-filter: blur(8px);
 }
 
 .create-form {
@@ -23,6 +29,7 @@
   justify-content: space-between;
   width: 100%;
   gap: 1rem;
+  flex-wrap: wrap;
 }
 
 .header-left {
@@ -57,6 +64,58 @@
   margin: 0;
 }
 
+.form-error--multiline {
+  white-space: pre-line;
+  line-height: 1.45;
+  padding: 0.5rem 0.65rem;
+  border-radius: 4px;
+  background: rgba(176, 0, 32, 0.06);
+  border: 1px solid rgba(176, 0, 32, 0.25);
+}
+
+.page-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.75rem 0.85rem;
+  margin-bottom: 0.75rem;
+  border-radius: 6px;
+  border: 1px solid rgba(176, 0, 32, 0.35);
+  background: rgba(176, 0, 32, 0.06);
+}
+
+.page-alert--error .page-alert-icon {
+  color: #b00020;
+  flex-shrink: 0;
+  margin-top: 0.1rem;
+}
+
+.page-alert-text-block {
+  flex: 1;
+  min-width: 0;
+}
+
+.page-alert-title {
+  font-weight: 600;
+  font-size: 0.9375rem;
+  margin-bottom: 0.25rem;
+}
+
+.page-alert-detail {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.45;
+  white-space: pre-line;
+  color: rgba(0, 0, 0, 0.75);
+}
+
+.page-alert-actions {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.25rem;
+  flex-shrink: 0;
+}
+
 .form-actions {
   margin-top: 0.25rem;
   display: flex;
@@ -64,8 +123,18 @@
   justify-content: flex-end;
 }
 
+/** Horizontal scroll on narrow viewports; table keeps readable column widths. */
+.embroidery-table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+  margin: 0 -0.25rem;
+  padding: 0 0.25rem 0.35rem;
+}
+
 .embroidery-table {
   width: 100%;
+  min-width: 720px;
   border-collapse: collapse;
   margin-top: 0.5rem;
 }
@@ -111,6 +180,39 @@
   width: 48px;
   height: 48px;
   opacity: 0.5;
+}
+
+.pattern-col {
+  min-width: 8rem;
+  max-width: 14rem;
+}
+
+.pattern-cell {
+  font-size: 0.875rem;
+}
+
+.pattern-name {
+  font-weight: 500;
+}
+
+.completion-col {
+  min-width: 9rem;
+  max-width: 14rem;
+}
+
+.completion-cell {
+  font-size: 0.8125rem;
+  line-height: 1.35;
+}
+
+.completion-mini {
+  display: block;
+}
+
+.completion-hours {
+  display: block;
+  color: rgba(0, 0, 0, 0.55);
+  font-size: 0.75rem;
 }
 
 .materials-col {
@@ -218,4 +320,112 @@
   object-fit: contain;
   border-radius: 4px;
   border: 1px solid rgba(0, 0, 0, 0.12);
+}
+
+.completion-fieldset {
+  margin: 0.5rem 0 0.75rem;
+  padding: 0.75rem 0.75rem 0.5rem;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 8px;
+}
+
+.completion-legend {
+  padding: 0 0.35rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.completion-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-top: 0.5rem;
+}
+
+.completion-date-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0.75rem;
+  width: 100%;
+}
+
+.completion-date-field {
+  flex: 1 1 14rem;
+  min-width: 0;
+}
+
+.today-button {
+  flex: 0 0 auto;
+  margin-top: 0.35rem;
+}
+
+/* —— Mobile / small tablets —— */
+@media (max-width: 768px) {
+  .list-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .list-header button[mat-raised-button] {
+    width: 100%;
+  }
+
+  .embroidery-table th,
+  .embroidery-table td {
+    padding: 0.55rem 0.35rem;
+    font-size: 0.875rem;
+  }
+
+  .embroidery-table th {
+    font-size: 0.8125rem;
+  }
+
+  .cover-cell {
+    width: 100px;
+  }
+
+  .embroidery-cover {
+    max-width: 100px;
+    min-height: 72px;
+  }
+
+  .cover-placeholder {
+    max-width: 100px;
+    min-height: 72px;
+  }
+
+  .cover-placeholder mat-icon {
+    font-size: 36px;
+    width: 36px;
+    height: 36px;
+  }
+
+  .materials-col {
+    min-width: 10rem;
+  }
+
+  .pattern-col {
+    min-width: 6.5rem;
+  }
+
+  .completion-col {
+    min-width: 7.5rem;
+  }
+
+  .actions-col {
+    width: 96px;
+  }
+}
+
+@media (max-width: 480px) {
+  .embroidery-table {
+    min-width: 640px;
+  }
+
+  .embroidery-table th,
+  .embroidery-table td {
+    padding: 0.45rem 0.3rem;
+    font-size: 0.8125rem;
+  }
 }

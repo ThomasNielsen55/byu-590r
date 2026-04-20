@@ -71,8 +71,17 @@ export class BooksService {
     );
   }
 
+  /** Today's date in the user's local timezone (Y-m-d), aligned with <input type="date">. */
+  private localDateYmd(): string {
+    const d = new Date();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${d.getFullYear()}-${m}-${day}`;
+  }
+
   checkoutBook(book: Book, dueDate: string): Observable<{ success: boolean; results: { book: Book }; message: string }> {
     const formData = new FormData();
+    formData.append('checkout_date', this.localDateYmd());
     formData.append('due_date', dueDate);
     return this.http.post<{ success: boolean; results: { book: Book }; message: string }>(
       `${this.apiUrl}books/${book.id}/checkout`,

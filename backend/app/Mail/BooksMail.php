@@ -44,7 +44,7 @@ class BooksMail extends Mailable
     public function content()
     {
         return new Content(
-            view: 'mail.books-list',
+            view: 'mail.books-master-list',
             with: [
                 'books' => $this->books
             ]

@@ -7,13 +7,16 @@ import {
   patchState,
 } from '@ngrx/signals';
 import { EmbroideryService, Embroidery } from '../services/embroidery.service';
+import { formatHttpApiError } from '../utils/http-api-error';
 
 export interface EmbroideryState {
   embroideryList: Embroidery[];
+  loadError: string | null;
 }
 
 const initialState: EmbroideryState = {
   embroideryList: [],
+  loadError: null,
 };
 
 export const EmbroideryStore = signalStore(
@@ -25,13 +28,25 @@ export const EmbroideryStore = signalStore(
   withMethods((store) => {
     const embroideryService = inject(EmbroideryService);
     return {
+      clearLoadError(): void {
+        patchState(store, { loadError: null });
+      },
       loadEmbroideries(): void {
+        patchState(store, { loadError: null });
         embroideryService.getEmbroideries().subscribe({
           next: (response) => {
-            patchState(store, { embroideryList: response.results });
+            patchState(store, {
+              embroideryList: response.results,
+              loadError: null,
+            });
           },
           error: (err) => {
-            console.error('Error fetching embroideries:', err);
+            patchState(store, {
+              loadError: formatHttpApiError(
+                err,
+                'Could not load your embroidery list. Pull to refresh or try again.'
+              ),
+            });
           },
         });
       },

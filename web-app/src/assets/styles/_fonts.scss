@@ -1,5 +1,7 @@
-// Typography - System font stack for better performance and accessibility
-$main-typography: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol';
+// Typography — DM Sans UI, Outfit for display / hero titles
+$display-typography: 'Outfit', 'DM Sans', system-ui, sans-serif;
+$main-typography: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue',
+  Arial, sans-serif;
 
 // Font weights
 $font-weight-light: 300;
@@ -30,16 +32,22 @@ $line-height-relaxed: 1.75;
     line-height: $line-height-normal;
 }
 
+@mixin fonts-display {
+  font-family: $display-typography;
+  font-weight: $font-weight-semibold;
+  letter-spacing: -0.02em;
+}
+
 @mixin fonts-h1 {
     font-weight: $font-weight-bold;
-    font-family: $main-typography;
+    font-family: $display-typography;
     font-size: $font-size-3xl;
     line-height: $line-height-tight;
 }
 
 @mixin fonts-h2 {
     font-weight: $font-weight-semibold;
-    font-family: $main-typography;
+    font-family: $display-typography;
     font-size: $font-size-2xl;
     line-height: $line-height-tight;
 }

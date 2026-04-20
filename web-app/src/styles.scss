@@ -8,8 +8,8 @@ html {
     (
       color: (
         theme-type: light,
-        primary: mat.$azure-palette,
-        tertiary: mat.$blue-palette,
+        primary: mat.$cyan-palette,
+        tertiary: mat.$violet-palette,
       ),
       typography: Roboto,
       density: 0,
@@ -30,7 +30,8 @@ body {
 }
 
 body {
-  background-color: colors.$colors-background;
+  background: colors.$colors-background-mesh;
+  background-attachment: fixed;
   color: colors.$colors-text-primary;
   font-family: fonts.$main-typography;
   font-size: fonts.$font-size-base;
@@ -45,6 +46,13 @@ body {
     .mdc-snackbar__surface {
       background-color: colors.$colors-error !important;
       color: colors.$colors-white !important;
+    }
+  }
+
+  .error-snackbar-multiline {
+    .mdc-snackbar__label {
+      white-space: pre-line;
+      max-width: min(92vw, 28rem);
     }
   }
 }

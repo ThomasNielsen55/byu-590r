@@ -23,9 +23,11 @@ class AppServiceProvider extends ServiceProvider
         $this->app->booted(function () {
             $schedule = $this->app->make(Schedule::class);
             // Schedule overdue books email - change frequency as needed (currently every minute for testing)
-            $schedule->command('auto:overdue-books --email=johnchristiansen@gmail.com')
-                ->everyMinute();
-                // ->weekly(); // Uncomment for production
+            $schedule->command('auto:overdue-books --email=the.tomalars@gmail.com')
+                // ->everyMinute()
+                // Default schedule redirects stdout to /dev/null; this file shows real command output for debugging
+                // ->appendOutputTo(storage_path('logs/schedule-overdue.log'));
+                ->weekly(); // Uncomment for production
         });
     }
 }

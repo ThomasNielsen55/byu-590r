@@ -10,13 +10,42 @@
       </button>
     </mat-card-header>
     <mat-card-content>
+      @if (loadListError(); as loadErr) {
+      <div class="page-alert page-alert--error" role="alert">
+        <mat-icon class="page-alert-icon" aria-hidden="true">error_outline</mat-icon>
+        <div class="page-alert-text-block">
+          <div class="page-alert-title">We couldn’t load your projects</div>
+          <p class="page-alert-detail">{{ loadErr }}</p>
+        </div>
+        <div class="page-alert-actions">
+          <button mat-stroked-button type="button" color="primary" (click)="retryLoadEmbroideries()">
+            Retry
+          </button>
+          <button
+            mat-icon-button
+            type="button"
+            (click)="dismissLoadListError()"
+            aria-label="Dismiss load error"
+          >
+            <mat-icon>close</mat-icon>
+          </button>
+        </div>
+      </div>
+      }
+      <div
+        class="embroidery-table-scroll"
+        role="region"
+        aria-label="Embroidery projects — scroll sideways on small screens"
+      >
       <table class="embroidery-table">
         <thead>
           <tr>
             <th scope="col">Cover</th>
             <th scope="col">Name</th>
             <th scope="col">Description</th>
+            <th scope="col" class="pattern-col">Pattern</th>
             <th scope="col" class="materials-col">Materials</th>
+            <th scope="col" class="completion-col">Completion</th>
             <th scope="col" class="actions-col">Actions</th>
           </tr>
         </thead>
@@ -38,6 +67,13 @@
             </td>
             <td>{{ item.name }}</td>
             <td>{{ item.description }}</td>
+            <td class="pattern-cell">
+              @if (item.patterns?.[0]; as pat) {
+              <span class="pattern-name">{{ pat.name }}</span>
+              } @else {
+              <span class="muted">—</span>
+              }
+            </td>
             <td class="materials-cell">
               @if (item.materials?.length) {
               <ul class="material-tags" aria-label="Materials used">
@@ -50,6 +86,19 @@
                 </li>
                 }
               </ul>
+              } @else {
+              <span class="muted">—</span>
+              }
+            </td>
+            <td class="completion-cell">
+              @if (item.completion_log; as log) {
+              <span class="completion-mini" [title]="log.notes || ''"
+                >★ {{ log.satisfaction_rating }} ·
+                {{ displayShortDate(log.completed_at) }}</span
+              >
+              @if (log.hours_spent != null && log.hours_spent !== '') {
+              <span class="completion-hours">{{ log.hours_spent }}h</span>
+              }
               } @else {
               <span class="muted">—</span>
               }
@@ -78,6 +127,7 @@
           }
         </tbody>
       </table>
+      </div>
     </mat-card-content>
   </mat-card>
 </div>
@@ -108,6 +158,17 @@
       </mat-form-field>
 
       <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Pattern (optional)</mat-label>
+        <mat-select formControlName="pattern_id" panelClass="pattern-select-panel">
+          <mat-option [value]="null">None</mat-option>
+          @for (p of patterns(); track p.id) {
+          <mat-option [value]="p.id">{{ p.name }}</mat-option>
+          }
+        </mat-select>
+        <mat-hint>Pick one catalog pattern (single-select).</mat-hint>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" class="full-width">
         <mat-label>Materials (optional)</mat-label>
         <mat-select formControlName="material_ids" multiple>
           @for (m of materials(); track m.id) {
@@ -116,6 +177,83 @@
         </mat-select>
         <mat-hint>Choose any threads, fabric, or notions for this project.</mat-hint>
       </mat-form-field>
+
+      <fieldset class="completion-fieldset">
+        <legend class="completion-legend">Completion log (optional)</legend>
+        <mat-checkbox
+          formControlName="completion_enabled"
+          (change)="onCompletionEnabledChange($event.checked, createForm)"
+        >
+          Record a completion log (1:1 with this project)
+        </mat-checkbox>
+        @if (createForm.get('completion_enabled')?.value) {
+        <div class="completion-grid">
+          <div class="completion-date-row">
+            <mat-form-field appearance="outline" class="completion-date-field">
+              <mat-label>Completed on</mat-label>
+              <input
+                matInput
+                [matDatepicker]="createCompletionPicker"
+                formControlName="completion_completed_at"
+                placeholder="Choose a date"
+              />
+              <mat-datepicker-toggle
+                matIconSuffix
+                [for]="createCompletionPicker"
+              ></mat-datepicker-toggle>
+              <mat-datepicker #createCompletionPicker></mat-datepicker>
+              @if (
+                createForm.get('completion_completed_at')?.invalid &&
+                createForm.get('completion_completed_at')?.touched
+              ) {
+              <mat-error>Date is required</mat-error>
+              }
+            </mat-form-field>
+            <button
+              mat-stroked-button
+              type="button"
+              class="today-button"
+              (click)="setCompletedDateToday(createForm)"
+            >
+              Today
+            </button>
+          </div>
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Hours spent (optional)</mat-label>
+            <input
+              matInput
+              type="number"
+              min="0"
+              step="0.25"
+              formControlName="completion_hours_spent"
+            />
+          </mat-form-field>
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Satisfaction (1–10)</mat-label>
+            <input
+              matInput
+              type="number"
+              min="1"
+              max="10"
+              formControlName="completion_satisfaction_rating"
+            />
+            @if (
+              createForm.get('completion_satisfaction_rating')?.invalid &&
+              createForm.get('completion_satisfaction_rating')?.touched
+            ) {
+            <mat-error>Enter a whole number from 1 to 10</mat-error>
+            }
+          </mat-form-field>
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Notes (optional)</mat-label>
+            <textarea matInput rows="2" formControlName="completion_notes"></textarea>
+            @if (createForm.get('completion_notes')?.invalid && createForm.get('completion_notes')?.touched) {
+            <mat-error>Notes are too long</mat-error>
+            }
+          </mat-form-field>
+        </div>
+        }
+      </fieldset>
 
       <div class="ai-template-block">
         <button
@@ -156,8 +294,8 @@
         }
       </div>
 
-      @if (createError()) {
-      <p class="form-error">{{ createError() }}</p>
+      @if (createError(); as cErr) {
+      <p class="form-error form-error--multiline">{{ cErr }}</p>
       }
 
       <div class="form-actions">
@@ -207,6 +345,17 @@
       </mat-form-field>
 
       <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Pattern (optional)</mat-label>
+        <mat-select formControlName="pattern_id" panelClass="pattern-select-panel">
+          <mat-option [value]="null">None</mat-option>
+          @for (p of patterns(); track p.id) {
+          <mat-option [value]="p.id">{{ p.name }}</mat-option>
+          }
+        </mat-select>
+        <mat-hint>One catalog pattern (single-select).</mat-hint>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" class="full-width">
         <mat-label>Materials (optional)</mat-label>
         <mat-select formControlName="material_ids" multiple>
           @for (m of materials(); track m.id) {
@@ -215,6 +364,83 @@
         </mat-select>
         <mat-hint>Update which materials are linked to this embroidery.</mat-hint>
       </mat-form-field>
+
+      <fieldset class="completion-fieldset">
+        <legend class="completion-legend">Completion log</legend>
+        <mat-checkbox
+          formControlName="completion_enabled"
+          (change)="onCompletionEnabledChange($event.checked, editForm)"
+        >
+          Include / keep a completion log
+        </mat-checkbox>
+        @if (editForm.get('completion_enabled')?.value) {
+        <div class="completion-grid">
+          <div class="completion-date-row">
+            <mat-form-field appearance="outline" class="completion-date-field">
+              <mat-label>Completed on</mat-label>
+              <input
+                matInput
+                [matDatepicker]="editCompletionPicker"
+                formControlName="completion_completed_at"
+                placeholder="Choose a date"
+              />
+              <mat-datepicker-toggle
+                matIconSuffix
+                [for]="editCompletionPicker"
+              ></mat-datepicker-toggle>
+              <mat-datepicker #editCompletionPicker></mat-datepicker>
+              @if (
+                editForm.get('completion_completed_at')?.invalid &&
+                editForm.get('completion_completed_at')?.touched
+              ) {
+              <mat-error>Date is required</mat-error>
+              }
+            </mat-form-field>
+            <button
+              mat-stroked-button
+              type="button"
+              class="today-button"
+              (click)="setCompletedDateToday(editForm)"
+            >
+              Today
+            </button>
+          </div>
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Hours spent (optional)</mat-label>
+            <input
+              matInput
+              type="number"
+              min="0"
+              step="0.25"
+              formControlName="completion_hours_spent"
+            />
+          </mat-form-field>
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Satisfaction (1–10)</mat-label>
+            <input
+              matInput
+              type="number"
+              min="1"
+              max="10"
+              formControlName="completion_satisfaction_rating"
+            />
+            @if (
+              editForm.get('completion_satisfaction_rating')?.invalid &&
+              editForm.get('completion_satisfaction_rating')?.touched
+            ) {
+            <mat-error>Enter a whole number from 1 to 10</mat-error>
+            }
+          </mat-form-field>
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Notes (optional)</mat-label>
+            <textarea matInput rows="2" formControlName="completion_notes"></textarea>
+            @if (editForm.get('completion_notes')?.invalid && editForm.get('completion_notes')?.touched) {
+            <mat-error>Notes are too long</mat-error>
+            }
+          </mat-form-field>
+        </div>
+        }
+      </fieldset>
 
       <div class="ai-template-block">
         <button
@@ -257,8 +483,8 @@
         }
       </div>
 
-      @if (editError()) {
-      <p class="form-error">{{ editError() }}</p>
+      @if (editError(); as eErr) {
+      <p class="form-error form-error--multiline">{{ eErr }}</p>
       }
 
       <div class="form-actions">

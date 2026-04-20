@@ -23,6 +23,7 @@ class DatabaseSeeder extends Seeder
             AuthorBooksSeeder::class,
             PageSeeder::class,
             MaterialSeeder::class,
+            PatternSeeder::class,
             EmbroiderySeeder::class,
         ]);
     }

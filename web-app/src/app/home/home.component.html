@@ -1,13 +1,81 @@
-<div class="home-container">
-  <h2>Here are your favorite books:</h2>
-  <mat-card>
-    <mat-card-content>
-      <mat-list>
-        @for (book of listOfBooks; track book) {
-          <mat-list-item>{{ book }}</mat-list-item>
-        }
-      </mat-list>
-    </mat-card-content>
-  </mat-card>
-</div>
+<section class="home-hero" aria-labelledby="home-heading">
+  <div class="home-hero-copy">
+    <p class="home-kicker">Welcome back</p>
+    <h1 id="home-heading" class="home-title">
+      {{ authStore.userName() || 'Maker' }}, here’s your studio at a glance.
+    </h1>
+    <p class="home-sub">
+      Track embroidery, log finishes, and keep your thread dreams organized.
+    </p>
+    <div class="home-cta-row">
+      <a mat-flat-button color="primary" routerLink="/embroidery" class="home-cta-primary">
+        <mat-icon>palette</mat-icon>
+        Open embroidery
+      </a>
+    </div>
+  </div>
 
+  <div class="home-spotlight" [class.is-loading]="loading()">
+    @if (loading()) {
+    <div class="spotlight-loading">
+      <mat-spinner diameter="40"></mat-spinner>
+      <span>Loading your work…</span>
+    </div>
+    } @else {
+      @if (recentComplete(); as hero) {
+      <article class="spotlight-card">
+        <div class="spotlight-visual">
+          @if (hero.embroidery_picture) {
+          <img [src]="hero.embroidery_picture" [alt]="hero.name" class="spotlight-img" />
+          } @else {
+          <div class="spotlight-placeholder">
+            <mat-icon>styler</mat-icon>
+          </div>
+          }
+          <div class="spotlight-badge">
+            <mat-icon class="badge-icon">verified</mat-icon>
+            Latest finish
+          </div>
+        </div>
+        <div class="spotlight-body">
+          <h2 class="spotlight-title">{{ hero.name }}</h2>
+          <p class="spotlight-desc">{{ hero.description }}</p>
+          @if (hero.completion_log; as log) {
+          <dl class="spotlight-meta">
+            <div class="meta-row">
+              <dt>Completed</dt>
+              <dd>{{ displayShortDate(log.completed_at) }}</dd>
+            </div>
+            <div class="meta-row">
+              <dt>Satisfaction</dt>
+              <dd>★ {{ log.satisfaction_rating }} / 10</dd>
+            </div>
+            @if (log.hours_spent != null && log.hours_spent !== '') {
+            <div class="meta-row">
+              <dt>Hours</dt>
+              <dd>{{ log.hours_spent }}h</dd>
+            </div>
+            }
+          </dl>
+          }
+          <a mat-stroked-button color="primary" routerLink="/embroidery" class="spotlight-link">
+            View in list
+            <mat-icon iconPositionEnd>arrow_forward</mat-icon>
+          </a>
+        </div>
+      </article>
+      } @else {
+      <div class="spotlight-empty">
+        <div class="empty-icon-wrap">
+          <mat-icon>auto_awesome</mat-icon>
+        </div>
+        <h2 class="empty-title">No finished projects yet</h2>
+        <p class="empty-copy">
+          When you mark a project complete, it’ll land here as your hero shot — cover photo and all.
+        </p>
+        <a mat-flat-button color="primary" routerLink="/embroidery">Start in Embroidery</a>
+      </div>
+      }
+    }
+  </div>
+</section>
